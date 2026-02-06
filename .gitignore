@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+.installed.cfg
+MANIFEST
+
+# Tests / coverage
+.pytest_cache/
+.coverage*
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+.spyderproject
+.spyproject
+.ropeproject
+
+# Logs
+*.log
+
+# MLflow
+mlruns/
+
+# Models (tracked via MLflow)
+models/
+
+# Data (tracked via DVC)
+data/*
+!data/**/*.dvc
+!data/**/.gitkeep
+
+# Allow source code
+!src/data/
+
+# Docker
+**/.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
