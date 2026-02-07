@@ -136,30 +136,41 @@ mlops_project/
 
 ```mermaid
 flowchart LR
-User[Client / Browser]
-Frontend[Streamlit Frontend]
-Nginx[Nginx Reverse Proxy]
-EnsembleAPI[Ensemble API]
-InferenceAPI[Inference API xN]
-Airflow[Airflow]
-MLflow[MLflow]
-Prometheus[Prometheus]
-Grafana[Grafana]
-Evidently[Evidently]
+    User[Client / External User]
 
-    User --> Frontend
-    User --> Nginx
-    Frontend --> Nginx
+    Gateway[Gateway API<br/>/auth<br/>/predict<br/>/train<br/>/info<br/>/reload]
 
-    Nginx --> EnsembleAPI
-    Nginx --> InferenceAPI
+    InferenceAPI[Inference API<br/>/predict<br/>/info<br/>/reload]
 
-    Airflow --> EnsembleAPI
+    Airflow[Airflow<br/>Data Pipeline<br/>Train & Eval Pipeline]
+
+    Volume[(Docker Volume<br/>Data & Artifacts)]
+
+    MLflow[MLflow / W&B / DagsHub]
+
+    Prometheus[Prometheus]
+    Grafana[Grafana]
+
+    %% User entry point
+    User --> Gateway
+
+    %% Routing
+    Gateway -- redirect /predict --> InferenceAPI
+    Gateway -- trigger /train --> Airflow
+
+    %% Inference & monitoring
+    InferenceAPI --> Prometheus
+    Prometheus --> Grafana
+
+    %% Training pipeline
+    Airflow --> Volume
     Airflow --> MLflow
 
+    %% Inference logging
     InferenceAPI --> MLflow
-    Prometheus --> Grafana
-    Evidently --> MLflow
+
+    %% Data ingestion
+    RawData[Raw Data Source] --> Airflow
 ```
 
 ---
