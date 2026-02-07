@@ -181,13 +181,14 @@ flowchart LR
 
 ## Services and Ports
 
-Service Purpose Port Public
-Nginx Reverse proxy / entry point 80 Yes
-Frontend (Streamlit) Demo UI 8501 Optional
-Airflow Orchestration UI 8080 Dev only
-MLflow Experiment tracking 5000 Dev only
-Prometheus Metrics scraping 9090 Dev only
-Grafana Dashboards 3000 Dev only
+| Service              | Purpose                     | Port | Public   |
+| -------------------- | --------------------------- | ---- | -------- |
+| Nginx                | Reverse proxy / entry point | 80   | Yes      |
+| Frontend (Streamlit) | Demo UI                     | 8501 | Optional |
+| Airflow              | Orchestration UI            | 8080 | Dev only |
+| MLflow               | Experiment tracking         | 5000 | Dev only |
+| Prometheus           | Metrics scraping            | 9090 | Dev only |
+| Grafana              | Dashboards                  | 3000 | Dev only |
 
 Internal APIs are not exposed directly and are accessed only through Nginx.
 
