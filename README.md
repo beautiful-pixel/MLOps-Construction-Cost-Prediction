@@ -45,6 +45,7 @@ All metrics are logged and tracked using MLflow.
 
 ## Project Structure
 
+```text
 mlops_project/
 ├── dags/
 │ ├── ingestion_dag.py
@@ -92,6 +93,7 @@ mlops_project/
 ├── .env.example
 ├── README.md
 └── .gitignore
+```
 
 ---
 
@@ -132,6 +134,7 @@ mlops_project/
 
 ## Architecture Diagram (Mermaid)
 
+```mermaid
 flowchart LR
 User[Client / Browser]
 Frontend[Streamlit Frontend]
@@ -157,6 +160,7 @@ Evidently[Evidently]
     InferenceAPI --> MLflow
     Prometheus --> Grafana
     Evidently --> MLflow
+```
 
 ---
 
