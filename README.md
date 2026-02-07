@@ -1,26 +1,28 @@
-# MLOps – Construction Cost Prediction  
-### Multimodal Learning with Structured Data & Satellite Imagery (Solafune)
+# MLOps – Construction Cost Prediction
+
+## Multimodal Learning with Structured Data & Satellite Imagery (Solafune)
 
 This project implements an end-to-end MLOps pipeline for the Construction Cost Prediction challenge (Solafune), combining structured tabular data and satellite imagery to predict construction costs.
 
-The focus of this repository is not only on model performance, but on building a reproducible, scalable, and production-oriented machine learning system, covering the full lifecycle from data ingestion to monitoring in production.
+Beyond model performance, the focus is on building a reproducible, scalable, and production-oriented machine learning system, covering the full lifecycle from data ingestion to monitoring and maintenance.
 
 ---
 
 ## Project Objectives
 
 ### Machine Learning Objectives
-- Predict construction costs using:
-  - structured tabular features
-  - satellite images
-- Build a robust baseline model for multimodal learning
+
+- Predict construction costs using structured tabular features and satellite images
+- Build a robust multimodal baseline model
 - Track and compare experiments reproducibly
 
 ### MLOps Objectives
+
 - Design a modular and maintainable architecture
 - Version data, models, and configurations
 - Orchestrate workflows using Airflow
-- Deploy models through a FastAPI inference service
+- Deploy models through FastAPI microservices
+- Implement lightweight scalability
 - Monitor model performance and data drift
 - Automate testing and CI pipelines
 
@@ -28,17 +30,14 @@ The focus of this repository is not only on model performance, but on building a
 
 ## Evaluation Metrics
 
-The primary evaluation metric for this project is the **Root Mean Squared Logarithmic Error (RMSLE)**, which is the official metric of the Solafune Construction Cost Prediction challenge.
+The primary evaluation metric is the Root Mean Squared Logarithmic Error (RMSLE), which is the official metric of the Solafune challenge.
 
-RMSLE is well suited for this task as it focuses on relative errors and is robust to large variations in construction costs.
+RMSLE focuses on relative errors and is robust to large variations in construction costs.
 
-In addition, the following complementary metrics are reported:
+Complementary metrics:
 
-- **MAE (Mean Absolute Error)**  
-  Used for interpretability and business relevance, as it represents the average absolute error in the original target scale.
-
-- **R² (Coefficient of Determination)**  
-  Reported as a complementary diagnostic metric to measure the proportion of variance explained by the model.
+- MAE (Mean Absolute Error) for interpretability and business relevance
+- R² (Coefficient of Determination) as a complementary diagnostic metric
 
 All metrics are logged and tracked using MLflow.
 
@@ -46,138 +45,174 @@ All metrics are logged and tracked using MLflow.
 
 ## Project Structure
 
-    mlops_project/
-    ├── dags/
-    │   ├── ingestion_dag.py
-    │   ├── preprocess_dag.py
-    │   └── training_dag.py
-    │
-    ├── src/
-    │   ├── data/
-    │   │   ├── ingest.py
-    │   │   ├── validate.py
-    │   │   └── preprocess.py
-    │   │
-    │   ├── models/
-    │   │   ├── train.py
-    │   │   └── evaluate.py
-    │   │
-    │   └── inference/
-    │       └── predict.py
-    │
-    ├── api/
-    │   ├── inference_api/
-    │   │   ├── Dockerfile
-    │   │   ├── main.py
-    │   │   └── requirements.txt
-    │   │
-    │   └── ensemble_api/
-    │       ├── Dockerfile
-    │       ├── main.py
-    │       └── requirements.txt
-    │
-    ├── tests/
-    │   ├── data/
-    │   ├── models/
-    │   ├── inference/
-    │   └── api/
-    │
-    ├── monitoring/
-    │   ├── prometheus/
-    │   │   └── prometheus.yml
-    │   ├── grafana/
-    │   │   └── dashboards.json
-    │   └── evidently/
-    │       └── drift_report.py
-    │
-    ├── scripts/
-    │   ├── run_ingestion.py
-    │   ├── run_training.py
-    │   └── run_evaluation.py
-    │
-    ├── data/
-    │   ├── raw/
-    │   │   ├── tabular/
-    │   │   └── images/
-    │   └── processed/
-    │
-    ├── models/
-    ├── mlruns/
-    │
-    ├── docker/
-    │   ├── Dockerfile.airflow
-    │   ├── Dockerfile.mlflow
-    │   └── docker-compose.yml
-    │
-    ├── configs/
-    │   └── params.yaml
-    │
-    ├── .github/workflows/ci.yml
-    ├── .env.example
-    ├── requirements-base.txt
-    ├── README.md
-    └── .gitignore
+mlops_project/
+├── dags/
+│ ├── ingestion_dag.py
+│ ├── preprocess_dag.py
+│ └── training_dag.py
+│
+├── src/
+│ ├── data/
+│ ├── models/
+│ └── inference/
+│
+├── api/
+│ ├── inference_api/
+│ └── ensemble_api/
+│
+├── frontend/
+│ └── streamlit_app.py
+│
+├── monitoring/
+│ ├── prometheus/
+│ ├── grafana/
+│ └── evidently/
+│
+├── scripts/
+├── data/
+│ ├── raw/
+│ └── processed/
+│
+├── models/
+├── mlruns/
+│
+├── docker/
+│ ├── nginx/
+│ │ └── nginx.conf
+│ ├── Dockerfile.airflow
+│ ├── Dockerfile.mlflow
+│ └── docker-compose.yml
+│
+├── configs/
+│ └── params.yaml
+│
+├── pyproject.toml
+├── uv.lock
+├── .github/workflows/ci.yml
+├── .env.example
+├── README.md
+└── .gitignore
 
 ---
 
 ## MLOps Pipeline Overview
 
 ### 1. Data Ingestion
-- Detection of new datasets (structured + satellite images)
-- Schema validation and integrity checks
-- Raw data versioning using DVC
+
+- Detection of new datasets (structured data and satellite images)
+- Schema and integrity validation
+- Data versioning using DVC
 
 ### 2. Preprocessing & Feature Engineering
+
 - Cleaning and encoding of structured features
 - Image preprocessing (resizing, normalization)
-- Creation of multimodal training datasets
+- Construction of multimodal datasets
 
-### 3. Model Training
+### 3. Model Training & Experiment Tracking
+
 - Train / validation / test split
-- Multimodal model combining tabular and image features
-- Experiment tracking with MLflow (metrics, parameters, artifacts)
+- Multimodal model training
+- Experiment tracking with MLflow
 
-### 4. Deployment
-- FastAPI inference service
-- Dockerized microservices
-- Central orchestration API for inference and training triggers
+### 4. Deployment & Serving
+
+- FastAPI-based microservices
+- Dockerized services
+- Lightweight horizontal scalability using container replication
+- Nginx reverse proxy as a single entry point
 
 ### 5. Monitoring & Maintenance
-- API and model monitoring with Prometheus and Grafana
+
+- System and API monitoring with Prometheus and Grafana
 - Data and prediction drift detection using Evidently
-- Support for automated retraining pipelines
+- Support for automated retraining workflows
+
+---
+
+## Architecture Diagram (Mermaid)
+
+flowchart LR
+User[Client / Browser]
+Frontend[Streamlit Frontend]
+Nginx[Nginx Reverse Proxy]
+EnsembleAPI[Ensemble API]
+InferenceAPI[Inference API xN]
+Airflow[Airflow]
+MLflow[MLflow]
+Prometheus[Prometheus]
+Grafana[Grafana]
+Evidently[Evidently]
+
+    User --> Frontend
+    User --> Nginx
+    Frontend --> Nginx
+
+    Nginx --> EnsembleAPI
+    Nginx --> InferenceAPI
+
+    Airflow --> EnsembleAPI
+    Airflow --> MLflow
+
+    InferenceAPI --> MLflow
+    Prometheus --> Grafana
+    Evidently --> MLflow
+
+---
+
+## Services and Ports
+
+Service Purpose Port Public
+Nginx Reverse proxy / entry point 80 Yes
+Frontend (Streamlit) Demo UI 8501 Optional
+Airflow Orchestration UI 8080 Dev only
+MLflow Experiment tracking 5000 Dev only
+Prometheus Metrics scraping 9090 Dev only
+Grafana Dashboards 3000 Dev only
+
+Internal APIs are not exposed directly and are accessed only through Nginx.
 
 ---
 
 ## Testing Strategy
 
-The project includes unit tests covering:
-- data validation and preprocessing,
-- multimodal training and evaluation,
-- inference logic,
-- FastAPI endpoints.
+Unit tests cover:
 
-Tests are automatically executed in the CI pipeline.
+- data validation and preprocessing
+- model training and evaluation
+- inference logic
+- FastAPI endpoints
+
+Tests are executed automatically via GitHub Actions.
 
 ---
 
 ## Running the Project
 
-### 1. Clone the repository
+Clone the repository:
+
     git clone <repository_url>
     cd mlops_project
 
-### 2. Configure environment variables
+Configure environment variables:
+
     cp .env.example .env
 
-### 3. Start the services
+Start all services:
+
     docker-compose up --build
 
-Available services:
-- Airflow (orchestration)
-- MLflow (experiment tracking)
-- FastAPI inference API
-- Prometheus and Grafana (monitoring)
+---
+
+## Dependency Management (uv)
+
+This project uses uv for dependency management.
+
+- Dependencies are defined in pyproject.toml
+- Exact versions are locked in uv.lock
+- Local virtual environments are excluded from version control
+
+This ensures full reproducibility across local development, CI, and Docker environments.
 
 ---
 
@@ -189,20 +224,24 @@ Available services:
 - MLflow
 - FastAPI
 - Docker and Docker Compose
+- Nginx
 - Prometheus and Grafana
 - Evidently
 - DVC
+- uv
 - GitHub Actions
 
 ---
 
 ## Notes
 
-This project is designed with a strong focus on real-world MLOps practices, reproducibility, and maintainability.
+Kubernetes is intentionally not used to keep the architecture lightweight and focused on core MLOps concepts.
+The system is designed to be Kubernetes-ready, but Docker Compose and Nginx are sufficient for the project scope.
 
-The goal is not to maximize leaderboard performance, but to demonstrate a production-ready MLOps architecture for multimodal machine learning.
+The goal is not to maximize leaderboard performance, but to demonstrate a clean, maintainable, and production-oriented MLOps architecture.
 
 ---
 
 ## License
+
 This project is for educational and demonstration purposes.
