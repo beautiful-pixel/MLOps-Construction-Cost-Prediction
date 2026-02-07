@@ -137,40 +137,44 @@ mlops_project/
 ```mermaid
 flowchart LR
     User[Client / External User]
+    Nginx[Nginx<br/>Reverse Proxy]
 
     Gateway[Gateway API<br/>/auth<br/>/predict<br/>/train<br/>/info<br/>/reload]
-
     InferenceAPI[Inference API<br/>/predict<br/>/info<br/>/reload]
 
-    Airflow[Airflow<br/>Data Pipeline<br/>Train & Eval Pipeline]
+    RawData[(Docker Volume<br/>Raw Data<br/>versioned with DVC)]
 
-    Volume[(Docker Volume<br/>Data & Artifacts)]
+    DataPipeline[Data Pipeline<br/>Ingest / Validate / Preprocess]
+    ReadyData[(Docker Volume<br/>Preprocessed Data<br/>versioned with DVC)]
 
-    MLflow[MLflow / W&B / DagsHub]
+    TrainPipeline[Training Pipeline<br/>Train / Eval / Register]
+
+    MLflow[MLflow Tracking & Model Registry]
 
     Prometheus[Prometheus]
     Grafana[Grafana]
 
+
+
     %% User entry point
-    User --> Gateway
+    User --> Nginx
+    Nginx --> Gateway
 
     %% Routing
     Gateway -- redirect /predict --> InferenceAPI
-    Gateway -- trigger /train --> Airflow
+    Gateway -- trigger /train --> TrainPipeline
+    TrainPipeline -->|log & register model| MLflow
+    MLflow <-->|load model| InferenceAPI
 
     %% Inference & monitoring
     InferenceAPI --> Prometheus
     Prometheus --> Grafana
 
-    %% Training pipeline
-    Airflow --> Volume
-    Airflow --> MLflow
+    %% Data pipeline
+    RawData -->|new data trigger| DataPipeline
+    DataPipeline --> ReadyData
+    ReadyData --> TrainPipeline
 
-    %% Inference logging
-    InferenceAPI --> MLflow
-
-    %% Data ingestion
-    RawData[Raw Data Source] --> Airflow
 ```
 
 ---
