@@ -47,52 +47,77 @@ All metrics are logged and tracked using MLflow.
 
 ```text
 mlops_project/
-├── dags/
-│ ├── ingestion_dag.py
-│ ├── preprocess_dag.py
-│ └── training_dag.py
-│
-├── src/
-│ ├── data/
-│ ├── models/
-│ └── inference/
-│
 ├── api/
-│ ├── inference_api/
-│ └── ensemble_api/
+│   ├── gateway_api/              # API gateway (point d’entrée unique)
+│   │   ├── Dockerfile
+│   │   ├── main.py               # /predict, /train, orchestration
+│   │   └── requirements.txt
+│   │
+│   └── inference_api/            # Microservice d’inférence ML
+│       ├── Dockerfile
+│       ├── main.py               # Exposition /predict
+│       └── requirements.txt
+│
+├── dags/                          # Airflow DAGs
+│   ├── ingestion_dag.py
+│   ├── preprocess_dag.py
+│   └── training_dag.py
+│
+├── src/                           # Logique métier ML (lib Python)
+│   ├── data/                     # Ingestion, preprocessing, validation
+│   ├── training/                 # Entraînement, évaluation
+│   ├── inference/                # Prédiction (utilisée par inference_api)
+│   ├── models/                   # Enregistrement MLflow
+│   └── logging/                  # Logging applicatif
+│
+├── deployments/                   # Déploiement & orchestration
+│   ├── docker-compose.yml        # Stack complète (API, MLflow, nginx, etc.)
+│   ├── Makefile                  # Commandes projet (start/stop/logs)
+│   ├── airflow/
+│   │   └── Dockerfile.airflow
+│   ├── mlflow/
+│   │   └── Dockerfile.mlflow
+│   ├── nginx/
+│   │   ├── nginx.conf
+│   │   └── certs/
+│   └── prometheus/
+│       └── prometheus.yml
+│
+├── data/                          # Données versionnées (DVC)
+│   ├── raw/
+│   ├── processed/
+│   ├── batches/
+│   └── *.dvc
+│
+├── mlflow_server/                 # Backend MLflow (sqlite + artifacts)
+│   ├── mlflow.db
+│   └── artifacts/
+│
+├── monitoring/                    # Monitoring & analyse offline
+│   ├── prometheus/
+│   ├── grafana/
+│   └── evidently/
 │
 ├── frontend/
-│ └── streamlit_app.py
+│   └── streamlit_app.py           # Interface utilisateur
 │
-├── monitoring/
-│ ├── prometheus/
-│ ├── grafana/
-│ └── evidently/
+├── scripts/                       # Entry points manuels
+│   ├── run_ingestion.py
+│   ├── run_training.py
+│   └── split_by_year.py
 │
-├── scripts/
-├── data/
-│ ├── raw/
-│ └── processed/
-│
-├── models/
-├── mlruns/
-│
-├── docker/
-│ ├── nginx/
-│ │ └── nginx.conf
-│ ├── Dockerfile.airflow
-│ ├── Dockerfile.mlflow
-│ └── docker-compose.yml
+├── tests/                         # Tests unitaires et d’intégration
 │
 ├── configs/
-│ └── params.yaml
+│   └── params.yaml                # Paramètres globaux
+│
+├── logs/                          # Logs runtime (non versionnés en prod)
 │
 ├── pyproject.toml
+├── requirements-base.txt
 ├── uv.lock
-├── .github/workflows/ci.yml
-├── .env.example
-├── README.md
-└── .gitignore
+└── README.md
+
 ```
 
 ---
