@@ -1,0 +1,23 @@
+# Core
+numpy<2
+pandas
+scipy
+pyyaml
+
+# ML
+scikit-learn
+lightgbm
+xgboost
+statsmodels
+
+# Data versioning
+dvc
+dvc-s3
+
+# Progress & reporting
+tqdm
+tabulate
+
+# Visualization
+matplotlib
+seaborn

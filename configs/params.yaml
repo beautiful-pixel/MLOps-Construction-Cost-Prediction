@@ -1,0 +1,21 @@
+training:
+  data_path: data/processed/preprocessed.csv
+  target_col: construction_cost_per_m2_usd
+  location_col: geolocation_name
+  year_col: year
+
+  split:
+    train_years: [2019, 2020, 2021]
+    test_locations:
+      - 01000 Hokkaido
+      - Dinagat Islands
+      - 29000 Nara
+    recent_years: [2023, 2024]
+
+  model:
+    name: lightgbm
+    params:
+      num_leaves: 31
+      learning_rate: 0.05
+
+  feature_set: S3
