@@ -1,0 +1,25 @@
+version: 1
+
+data_contract: 1
+
+split_strategy: geographic
+
+geographic_column: geolocation_name
+periodic_column: year
+
+test_localities:
+- 10000 Gunma
+- 20000 Nagano
+- 24000 Mie
+- Bulacan
+- Cotabato
+- Lanao del Norte
+- Negros Occidental
+- Nueva Vizcaya
+
+reference_test_period:
+  min: 2019
+  max: 2020
+
+moving_test_period:
+  durations: [1]

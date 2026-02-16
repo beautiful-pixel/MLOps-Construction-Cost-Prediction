@@ -1,0 +1,130 @@
+version: 1
+
+tabular_extensions: ['csv']
+
+image_extensions: ['tif']
+
+columns:
+  data_id:
+    type: string
+    non_nullable: true
+  geolocation_name:
+    type: string
+  quarter_label:
+    type: string
+    format: '^[0-9]{4}-Q[1-4]$'
+  country:
+    type: string
+  year:
+    type: int
+    min: 1950
+    max: 2100
+  deflated_gdp_usd:
+    type: float
+    min: 0
+  us_cpi:
+    type: float
+    min: 0
+  developed_country:
+    type: string
+    allowed_values:
+      - 'Yes'
+      - 'No'
+  landlocked:
+    type: string
+    allowed_values:
+      - 'Yes'
+      - 'No'
+  region_economic_classification:
+    type: string
+    allowed_values:
+      - 'Low income'
+      - 'Lower-middle income'
+      - 'Upper-middle income'
+      - 'High income'
+  access_to_airport:
+    type: string
+    allowed_values:
+      - 'Yes'
+      - 'No'
+  access_to_port:
+    type: string
+    allowed_values:
+      - 'Yes'
+      - 'No'
+  access_to_highway:
+    type: string
+    allowed_values:
+      - 'Yes'
+      - 'No'
+  access_to_railway:
+    type: string
+    allowed_values:
+      - 'Yes'
+      - 'No'
+  straight_distance_to_capital_km:
+    type: float
+    min: 0
+  seismic_hazard_zone:
+    type: string
+    allowed_values:
+      - 'Very Low'
+      - 'Low'
+      - 'Moderate'
+      - 'High'
+      - 'Very High'
+  flood_risk_class:
+    type: string
+    allowed_values:
+      - 'Yes'
+      - 'No'
+  tropical_cyclone_wind_risk:
+    type: string
+    allowed_values:
+      - 'Very Low'
+      - 'Low'
+      - 'Moderate'
+      - 'High'
+      - 'Very High'
+  tornadoes_wind_risk:
+    type: string
+    allowed_values:
+      - 'Very Low'
+      - 'Low'
+      - 'Moderate'
+      - 'High'
+      - 'Very High'
+  koppen_climate_zone:
+    type: string
+    format: '^(A(f|m|w|s)|B(W|S)(h|k)|C(f|w|s)(a|b|c)|D(f|w|s)(a|b|c|d)|E(T|F))$'
+  sentinel2_tiff_file_name:
+    type: string
+    format: '^sentinel_2_[\w\-]+\.tif$'
+    external_file:
+      type: image
+      name: sentinel2
+      bands: 12
+      height: 1024
+      width: 1024
+  viirs_tiff_file_name:
+    type: string
+    format: '^viirs_[\w\-]+\.tif$'
+    external_file:
+      type: image
+      name: viirs
+      bands: 1
+      height: 1024
+      width: 1024
+  construction_cost_per_m2_usd:
+    type: float
+    non_nullable: true
+    min: 0
+
+primary_key:
+  - data_id
+
+deduplication:
+  subset:
+    - data_id
+  keep: last
+

@@ -1,0 +1,6 @@
+data_contract_version: 1
+
+training_defaults:
+  feature_version: 1
+  split_version: 1
+  model_version: 1

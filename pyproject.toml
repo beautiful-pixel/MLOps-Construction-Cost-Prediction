@@ -9,4 +9,12 @@ dependencies = [
     "joblib>=1.5.3",
     "mlflow>=3.9.0",
     "pandas>=2.3.3",
+    "pytest>=9.0.2",
+    "rasterio>=1.4.4",
 ]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

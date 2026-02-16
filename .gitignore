@@ -41,18 +41,24 @@ ENV/
 *.log
 
 # MLflow
-mlruns/
+mlflow_server/
 
 # Models (tracked via MLflow)
 models/
 
 # Data (tracked via DVC)
-data/*
-!data/**/*.dvc
-!data/**/.gitkeep
+/data/*
+!/data/*/
+/data/*/**
+!/data/**/*.dvc
+!/data/**/.gitkeep
 
 # Allow source code
 !src/data/
+!src/models/
+
+# Allow model config
+!configs/models/
 
 # Docker
 **/.dockerignore
@@ -60,3 +66,13 @@ data/*
 # OS
 .DS_Store
 Thumbs.db
+
+# Airflow
+airflow_home/
+airflow_home/logs/
+airflow_home/*.cfg
+
+# pycache
+__pycache__/
+*.pyc
+
