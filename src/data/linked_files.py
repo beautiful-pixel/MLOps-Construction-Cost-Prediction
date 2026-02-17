@@ -170,10 +170,7 @@ def canonicalize_linked_images(
             dest_path = dest_dir / new_name
 
             if use_hardlink:
-                try:
-                    dest_path.hardlink_to(src_path)
-                except Exception:
-                    shutil.copy2(src_path, dest_path)
+                dest_path.hardlink_to(src_path)
             else:
                 shutil.copy2(src_path, dest_path)
 
