@@ -2,7 +2,7 @@ import argparse
 import logging
 
 from utils.logger import setup_logging
-from pipelines.train_pipeline.train import train_model
+from pipelines.train_pipeline.evaluate import evaluate_model
 from utils.mlflow_config import configure_mlflow
 
 
@@ -12,22 +12,18 @@ def main():
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--split-version", type=int, required=True)
     parser.add_argument("--feature-version", type=int, required=True)
-    parser.add_argument("--model-version", type=int, required=True)
 
     args = parser.parse_args()
 
     configure_mlflow()
 
-    train_model(
+    evaluate_model(
         run_id=args.run_id,
         split_version=args.split_version,
         feature_version=args.feature_version,
-        model_version=args.model_version,
     )
-
-    logging.info("Training completed successfully")
 
 
 if __name__ == "__main__":
-    setup_logging("train")
+    setup_logging("evaluate")
     main()

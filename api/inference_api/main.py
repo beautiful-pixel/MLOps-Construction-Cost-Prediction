@@ -1,161 +1,76 @@
+# main.py
+
 import os
-from typing import Any, Mapping
-import joblib
+import time
+import logging
 import numpy as np
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response
+from prometheus_client import generate_latest, Counter, Histogram, Gauge
+from mlflow import pyfunc
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from model_loader import load_model_and_metadata
+from schema_builder import build_pydantic_model
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("solafune-api")
 
-BASE_DIR = os.path.dirname(__file__)
-MODEL_PATH = os.path.join(BASE_DIR, "model.joblib")
+MODEL_VERSION = os.getenv("MODEL_VERSION")
 
-if not os.path.exists(MODEL_PATH):
-    MODEL_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "models", "model.joblib"))
+if not MODEL_VERSION:
+    raise RuntimeError("MODEL_VERSION environment variable is required.")
 
-FEATURE_NAMES = [
-    "seismic_hazard_zone_Moderate",
-    "koppen_climate_zone_Cwb",
-    "tropical_cyclone_wind_risk_Very High",
-    "koppen_climate_zone_Dfb",
-    "us_cpi",
-    "infrastructure_score",
-    "landlocked_uncompensated",
-    "flood_risk_class_Yes",
-    "tropical_cyclone_wind_risk_Moderate",
-    "koppen_climate_zone_Am",
-    "country_Philippines",
-    "koppen_climate_zone_Aw",
-    "developed_country_binary",
-    "seismic_hazard_zone_Low",
-    "straight_distance_to_capital_km",
-    "koppen_climate_zone_Dfa",
-    "tornadoes_wind_risk_Very Low",
-    "region_economic_classification_Lower-middle income",
-    "far_no_highway",
-    "developed_country_Yes",
-    "dev_high_seismic",
-    "far_no_railway",
-    "distance_infra_interaction",
-    "koppen_climate_zone_Cfa",
-    "region_economic_classification_Low income",
-    "year",
-    "dev_high_flood",
-    "log_gdp_usd",
-    "tropical_cyclone_wind_risk_Low",
-]
+# Load model + feature schema from MLflow
+model, feature_schema, feature_version = load_model_and_metadata(MODEL_VERSION)
 
-# Chargement du modèle entraîné
-try:
-    model = joblib.load(MODEL_PATH)
-except FileNotFoundError:
-    raise RuntimeError(f"Model file not found at {MODEL_PATH}.")
-except Exception as e:
-    raise RuntimeError(f"Error loading model: {e}")
-
-if isinstance(model, Mapping) and "model" in model:
-    model = model["model"]
+# Build dynamic Pydantic model
+InputModel = build_pydantic_model(feature_schema)
 
 app = FastAPI(
-    title="Construction Cost Prediction API",
-    description="A simple API to predict construction costs based on Sentinel-2 satellite imagery.",
-    version="1.0.0",
+    title="Solafune Inference API",
+    version=MODEL_VERSION,
 )
 
-# modèle de données pour la requête d'entrée
-class ConstructionCostFeatures(BaseModel):
-    seismic_hazard_zone_moderate: int = Field(..., alias="seismic_hazard_zone_Moderate")
-    koppen_climate_zone_cwb: int = Field(..., alias="koppen_climate_zone_Cwb")
-    tropical_cyclone_wind_risk_very_high: int = Field(..., alias="tropical_cyclone_wind_risk_Very High")
-    koppen_climate_zone_dfb: int = Field(..., alias="koppen_climate_zone_Dfb")
-    us_cpi: float
-    infrastructure_score: float
-    landlocked_uncompensated: int
-    flood_risk_class_yes: int = Field(..., alias="flood_risk_class_Yes")
-    tropical_cyclone_wind_risk_moderate: int = Field(..., alias="tropical_cyclone_wind_risk_Moderate")
-    koppen_climate_zone_am: int = Field(..., alias="koppen_climate_zone_Am")
-    country_philippines: int = Field(..., alias="country_Philippines")
-    koppen_climate_zone_aw: int = Field(..., alias="koppen_climate_zone_Aw")
-    developed_country_binary: int
-    seismic_hazard_zone_low: int = Field(..., alias="seismic_hazard_zone_Low")
-    straight_distance_to_capital_km: float
-    koppen_climate_zone_dfa: int = Field(..., alias="koppen_climate_zone_Dfa")
-    tornadoes_wind_risk_very_low: int = Field(..., alias="tornadoes_wind_risk_Very Low")
-    region_economic_classification_lower_middle_income: int = Field(
-        ..., alias="region_economic_classification_Lower-middle income"
-    )
-    far_no_highway: int
-    developed_country_yes: int = Field(..., alias="developed_country_Yes")
-    dev_high_seismic: int
-    far_no_railway: int
-    distance_infra_interaction: float
-    koppen_climate_zone_cfa: int = Field(..., alias="koppen_climate_zone_Cfa")
-    region_economic_classification_low_income: int = Field(
-        ..., alias="region_economic_classification_Low income"
-    )
-    year: int
-    dev_high_flood: int
-    log_gdp_usd: float
-    tropical_cyclone_wind_risk_low: int = Field(..., alias="tropical_cyclone_wind_risk_Low")
+# Prometheus metrics
+request_count = Counter("api_requests_total", "Total API requests")
+request_latency = Histogram("api_request_duration_seconds", "Request latency")
+model_version_gauge = Gauge("served_model_version", "Model version served")
+model_version_gauge.set(int(MODEL_VERSION))
 
-    model_config = ConfigDict(
-        populate_by_name=True,
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "seismic_hazard_zone_Moderate": 1,
-                    "koppen_climate_zone_Cwb": 0,
-                    "tropical_cyclone_wind_risk_Very High": 1,
-                    "koppen_climate_zone_Dfb": 0,
-                    "us_cpi": 302.1,
-                    "infrastructure_score": 0.62,
-                    "landlocked_uncompensated": 0,
-                    "flood_risk_class_Yes": 1,
-                    "tropical_cyclone_wind_risk_Moderate": 0,
-                    "koppen_climate_zone_Am": 0,
-                    "country_Philippines": 1,
-                    "koppen_climate_zone_Aw": 0,
-                    "developed_country_binary": 0,
-                    "seismic_hazard_zone_Low": 0,
-                    "straight_distance_to_capital_km": 45.7,
-                    "koppen_climate_zone_Dfa": 0,
-                    "tornadoes_wind_risk_Very Low": 1,
-                    "region_economic_classification_Lower-middle income": 1,
-                    "far_no_highway": 0,
-                    "developed_country_Yes": 0,
-                    "dev_high_seismic": 1,
-                    "far_no_railway": 0,
-                    "distance_infra_interaction": 12.3,
-                    "koppen_climate_zone_Cfa": 0,
-                    "region_economic_classification_Low income": 0,
-                    "year": 2023,
-                    "dev_high_flood": 1,
-                    "log_gdp_usd": 26.8,
-                    "tropical_cyclone_wind_risk_Low": 0,
-                }
-            ]
-        },
-    )
-
-# endpoint de prédiction
 @app.post("/predict")
-def predict(features: ConstructionCostFeatures):
+def predict(payload: InputModel):
+    start_time = time.time()
+
     try:
-        payload = features.model_dump(by_alias=True)
-        input_features = np.array(
-            [payload[name] for name in FEATURE_NAMES],
-            dtype=float,
-        ).reshape(1, -1)
+        input_dict = payload.model_dump()
+        input_array = np.array([list(input_dict.values())])
 
-        prediction = model.predict(input_features)
+        prediction = model.predict(input_array)
+        prediction_value = float(prediction[0])
 
-        return {"prediction": float(prediction[0])}
+        request_count.inc()
+        request_latency.observe(time.time() - start_time)
+
+        return {
+            "prediction": prediction_value,
+            "model_version": MODEL_VERSION,
+            "feature_version": feature_version,
+        }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Prediction error: {e}")
-#  endpoint de sante 
+        logger.error("Prediction error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/health")
 def health():
-    """Endpoint de santé pour vérifier si l'API est opérationnelle."""
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "model_version": MODEL_VERSION,
+        "feature_version": feature_version,
+    }
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type="text/plain")

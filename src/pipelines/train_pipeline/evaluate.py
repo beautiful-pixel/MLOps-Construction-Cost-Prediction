@@ -33,6 +33,68 @@ REFERENCE_ROOT = PROJECT_ROOT / "data" / "reference" / "tests"
 SPLITS_ROOT = PROJECT_ROOT / "data" / "splits"
 
 
+
+
+
+MLFLOW_ROOT = PROJECT_ROOT / "mlflow_server" / "artifacts"
+
+
+def load_model_from_run(
+    run_id: str,
+    local_mode: bool = False,
+):
+    """
+    Load a sklearn model from an MLflow run.
+
+    If local_mode is False:
+        Uses standard MLflow URI resolution (runs:/).
+
+    If local_mode is True:
+        Resolves model_id from MLflow metadata and loads
+        directly from local filesystem, bypassing artifact API.
+    """
+
+    if not local_mode:
+        model_uri = f"runs:/{run_id}/model"
+        logging.info(f"Loading model via MLflow URI: {model_uri}")
+        return mlflow.sklearn.load_model(model_uri)
+
+    logging.info("Loading model in LOCAL mode (filesystem bypass)")
+
+    client = MlflowClient()
+
+    # Get run to retrieve experiment_id
+    run = client.get_run(run_id)
+    experiment_id = run.info.experiment_id
+
+    # Search logged models linked to this run
+    logged_models = client.search_logged_models(
+        experiment_ids=[experiment_id],
+        filter_string=f"source_run_id = '{run_id}'"
+    )
+
+    if not logged_models:
+        raise ValueError(f"No logged model found for run_id={run_id}")
+
+    model_id = logged_models[0].model_id
+
+    model_path = (
+        MLFLOW_ROOT
+        / experiment_id
+        / "models"
+        / model_id
+        / "artifacts"
+    )
+
+    if not model_path.exists():
+        raise ValueError(f"Local model path not found: {model_path}")
+
+    logging.info(f"Loading model from local path: {model_path}")
+
+    return mlflow.sklearn.load_model(str(model_path))
+
+    
+
 def evaluate_model(
     run_id: str,
     split_version: int,
@@ -56,24 +118,11 @@ def evaluate_model(
 
     # Load model from MLflow
 
+    pipeline = load_model_from_run(
+        run_id=run_id,
+        local_mode=True,   # False en prod
+    )
 
-    # model_uri = f"runs:/{run_id}/model"
-    # logging.info(f"Loading model from {model_uri}")
-    # pipeline = mlflow.sklearn.load_model(model_uri)
-    
-
-
-    client = MlflowClient()
-    run = client.get_run(run_id)
-
-    artifact_uri = run.info.artifact_uri
-    # exemple: file:///mlflow_server/artifacts/1/<run_id>/artifacts
-
-    local_path = artifact_uri.replace("file://", "")
-    model_path = Path(local_path) / "model"
-
-    logging.info(f"Loading model from local path {model_path}")
-    pipeline = mlflow.sklearn.load_model(str(model_path))
 
     # Load reference test
 

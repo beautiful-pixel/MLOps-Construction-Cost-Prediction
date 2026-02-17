@@ -72,60 +72,39 @@ def promote_if_better(run_id: str) -> bool:
             f"Metric '{REFERENCE_METRIC}' not found in run {run_id}"
         )
 
-    # Get current production model
-    production_run_id = _get_production_run_id()
-
-    # If no model in production → promote directly
-    if production_run_id is None:
-
-        model_uri = f"runs:/{run_id}/model"
-
-        result = mlflow.register_model(model_uri, MODEL_NAME)
-
-        client.transition_model_version_stage(
-            name=MODEL_NAME,
-            version=result.version,
-            stage="Production",
+    # Get current prod via alias
+    try:
+        prod_version = client.get_model_version_by_alias(
+            MODEL_NAME,
+            "prod",
         )
-
-        return True
-
-    # Compare metrics
-    production_metric = _get_metric_from_run(
-        production_run_id,
-        REFERENCE_METRIC,
-    )
-
-    if production_metric is None:
-        raise ValueError(
-            f"Metric '{REFERENCE_METRIC}' not found in production run"
+        production_metric = _get_metric_from_run(
+            prod_version.run_id,
+            REFERENCE_METRIC,
         )
+    except Exception:
+        prod_version = None
+        production_metric = None
 
-    if HIGHER_IS_BETTER:
-        is_better = candidate_metric > production_metric
-    else:
-        is_better = candidate_metric < production_metric
+    if production_metric is not None:
+        if HIGHER_IS_BETTER:
+            is_better = candidate_metric > production_metric
+        else:
+            is_better = candidate_metric < production_metric
 
-    if not is_better:
-        return False
+        if not is_better:
+            return False
 
-    # Register candidate
+
+    # Register new version
     model_uri = f"runs:/{run_id}/model"
     result = mlflow.register_model(model_uri, MODEL_NAME)
 
-    # Move old production to Archived
-    for version in client.get_latest_versions(MODEL_NAME, stages=["Production"]):
-        client.transition_model_version_stage(
-            name=MODEL_NAME,
-            version=version.version,
-            stage="Archived",
-        )
-
-    # Promote new version
-    client.transition_model_version_stage(
+    # Move alias
+    client.set_registered_model_alias(
         name=MODEL_NAME,
+        alias="prod",
         version=result.version,
-        stage="Production",
     )
 
     return True

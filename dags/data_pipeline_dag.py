@@ -1,13 +1,3 @@
-from airflow import DAG
-from airflow.operators.bash import BashOperator
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
-from airflow.utils.dates import days_ago
-
-DEFAULT_ARGS = {
-    "owner": "mlops"
-}
-
-
 """
 Data Pipeline DAG.
 
@@ -26,6 +16,7 @@ from datetime import timedelta
 
 from pipelines.data_pipeline.ingestion import ingest_incoming_files
 from pipelines.data_pipeline.preprocess import preprocess_batch
+from pipelines.data_pipeline.clean_incoming import clean_incoming
 from utils.data_versioning import dvc_add_raw, dvc_add_master, dvc_add_images
 
 from airflow.decorators import task
@@ -35,7 +26,7 @@ from airflow.decorators import task
 DEFAULT_ARGS = {
     "owner": "mlops",
     "retries": 1,
-    "retry_delay": timedelta(minutes=5),
+    "retry_delay": timedelta(minutes=1),
 }
 
 
@@ -102,14 +93,16 @@ def data_pipeline():
         return False
 
     @task
-    def clean_incoming(preprocess_success: bool) -> None:
+    def validate_and_clean_incoming(preprocess_success: bool) -> None:
         """
         Remove empty incoming folders if preprocessing was successful.
         """
         if not preprocess_success:
             return
 
-        remove_empty_directories(INCOMING_DIR)
+        clean_incoming()
+
+        
 
 
     batch_id = ingestion()
@@ -120,7 +113,7 @@ def data_pipeline():
     version_master(preprocess_success)
     version_images(preprocess_success)
 
-    clean_incoming(preprocess_success)
+    validate_and_clean_incoming(preprocess_success)
 
 
 data_pipeline()

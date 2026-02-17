@@ -1,0 +1,6 @@
+outs:
+- md5: 2a7701577628991d093f465f4f50b6ad
+  size: 116057
+  isexec: true
+  hash: md5
+  path: master.parquet

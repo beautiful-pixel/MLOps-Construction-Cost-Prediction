@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 import argparse
 
 from utils.logger import setup_logging
@@ -8,13 +7,19 @@ from pipelines.train_pipeline.split import run_split_pipeline
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--version",
-        default=None,
-        help="Split version to use (e.g. 1). If not specified, active version is used."
+
+    parser.add_argument("--split-version", type=int, required=True)
+
+    args = parser.parse_args()
+
+    reference_created = run_split_pipeline(
+        split_version=args.split_version,
     )
-    split_version = parser.parse_args().version
-    train_df, reference_test_df, cleaned_additional_tests, reference_created = run_split_pipeline(split_version)
+
+    logging.info(
+        f"Split v{args.split_version} completed "
+        f"(reference_created={reference_created})"
+    )
 
 
 if __name__ == "__main__":
