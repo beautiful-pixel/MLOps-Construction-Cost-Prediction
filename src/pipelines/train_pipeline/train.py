@@ -114,29 +114,31 @@ def train_model(
     # Attach to existing MLflow run
     mlflow.start_run(run_id=run_id)
 
-    # Log versions (redundant but safe)
-    mlflow.log_param("split_version", split_version)
-    mlflow.log_param("feature_version", feature_version)
-    mlflow.log_param("model_version", model_version)
+    try:
+        # Log versions (redundant but safe)
+        mlflow.log_param("split_version", split_version)
+        mlflow.log_param("feature_version", feature_version)
+        mlflow.log_param("model_version", model_version)
 
-    mlflow.log_param("model_type", model_schema["model"]["type"])
-    mlflow.log_params(model_schema["model"].get("params", {}))
+        mlflow.log_param("model_type", model_schema["model"]["type"])
+        mlflow.log_params(model_schema["model"].get("params", {}))
 
+        # Train
 
-    # Train
+        logging.info("Fitting training pipeline")
+        pipeline.fit(X, y)
 
-    logging.info("Fitting training pipeline")
-    pipeline.fit(X, y)
+        predictions = pipeline.predict(X)
+        train_metrics = compute_metrics(y, predictions)
+        train_metrics = {f"train_{k}": v for k, v in train_metrics.items()}
 
-    predictions = pipeline.predict(X)
-    train_metrics = compute_metrics(y, predictions)
-    train_metrics = {f"train_{k}": v for k, v in train_metrics.items()}
+        mlflow.log_metrics(train_metrics)
 
-    mlflow.log_metrics(train_metrics)
+        # Log model artifact
 
+        mlflow.sklearn.log_model(pipeline, artifact_path="model")
 
-    # Log model artifact
-    
-    mlflow.sklearn.log_model(pipeline, artifact_path="model")
+    finally:
+        mlflow.end_run()
 
     logging.info("Training completed successfully")

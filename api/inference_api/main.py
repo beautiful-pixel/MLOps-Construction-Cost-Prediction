@@ -1,17 +1,40 @@
+"""
+Construction Cost Prediction - Inference API.
+
+Loads the production model from MLflow Model Registry at startup.
+Falls back to a local joblib file if MLflow is unavailable.
+"""
+
 import os
-from typing import Any, Mapping
+import logging
+from typing import Any, Mapping, Optional
+
 import joblib
 import numpy as np
+import mlflow
+import mlflow.sklearn
+from mlflow.tracking import MlflowClient
+from mlflow.exceptions import MlflowException, RestException
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+MODEL_NAME = os.getenv("MLFLOW_MODEL_NAME", "construction_cost_model")
 
 BASE_DIR = os.path.dirname(__file__)
-MODEL_PATH = os.path.join(BASE_DIR, "model.joblib")
-
-if not os.path.exists(MODEL_PATH):
-    MODEL_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "models", "model.joblib"))
+FALLBACK_MODEL_PATH = os.path.join(BASE_DIR, "model.joblib")
+if not os.path.exists(FALLBACK_MODEL_PATH):
+    FALLBACK_MODEL_PATH = os.path.abspath(
+        os.path.join(BASE_DIR, "..", "..", "models", "model.joblib")
+    )
 
 FEATURE_NAMES = [
     "seismic_hazard_zone_Moderate",
@@ -45,24 +68,70 @@ FEATURE_NAMES = [
     "tropical_cyclone_wind_risk_Low",
 ]
 
-# Chargement du modèle entraîné
-try:
-    model = joblib.load(MODEL_PATH)
-except FileNotFoundError:
-    raise RuntimeError(f"Model file not found at {MODEL_PATH}.")
-except Exception as e:
-    raise RuntimeError(f"Error loading model: {e}")
 
-if isinstance(model, Mapping) and "model" in model:
-    model = model["model"]
+# ---------------------------------------------------------------------------
+# Model loading
+# ---------------------------------------------------------------------------
+
+def _load_from_mlflow() -> Optional[Any]:
+    """Try to load the Production model from MLflow Model Registry."""
+    try:
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        client = MlflowClient()
+
+        # Try stages-based lookup
+        versions = client.get_latest_versions(MODEL_NAME, stages=["Production"])
+        if versions:
+            model_uri = f"models:/{MODEL_NAME}/Production"
+            logger.info("Loading production model from MLflow: %s", model_uri)
+            return mlflow.sklearn.load_model(model_uri)
+
+        # Try alias-based lookup
+        try:
+            mv = client.get_model_version_by_alias(MODEL_NAME, "prod")
+            model_uri = f"models:/{MODEL_NAME}@prod"
+            logger.info("Loading model by alias from MLflow: %s", model_uri)
+            return mlflow.sklearn.load_model(model_uri)
+        except (RestException, MlflowException):
+            pass
+
+    except Exception as e:
+        logger.warning("Failed to load model from MLflow: %s", e)
+
+    return None
+
+
+def _load_from_joblib() -> Any:
+    """Load model from local joblib file."""
+    if not os.path.exists(FALLBACK_MODEL_PATH):
+        raise RuntimeError(
+            f"No model available. MLflow unreachable and no joblib at {FALLBACK_MODEL_PATH}"
+        )
+    logger.info("Loading fallback model from %s", FALLBACK_MODEL_PATH)
+    loaded = joblib.load(FALLBACK_MODEL_PATH)
+    if isinstance(loaded, Mapping) and "model" in loaded:
+        loaded = loaded["model"]
+    return loaded
+
+
+# Load model at startup
+model = _load_from_mlflow()
+if model is None:
+    model = _load_from_joblib()
+logger.info("Model loaded successfully")
+
+
+# ---------------------------------------------------------------------------
+# FastAPI application
+# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="Construction Cost Prediction API",
-    description="A simple API to predict construction costs based on Sentinel-2 satellite imagery.",
+    description="Predict construction costs per m2 (USD) from tabular features.",
     version="1.0.0",
 )
 
-# modèle de données pour la requête d'entrée
+
 class ConstructionCostFeatures(BaseModel):
     seismic_hazard_zone_moderate: int = Field(..., alias="seismic_hazard_zone_Moderate")
     koppen_climate_zone_cwb: int = Field(..., alias="koppen_climate_zone_Cwb")
@@ -138,9 +207,10 @@ class ConstructionCostFeatures(BaseModel):
         },
     )
 
-# endpoint de prédiction
+
 @app.post("/predict")
 def predict(features: ConstructionCostFeatures):
+    """Return a construction cost prediction for the given features."""
     try:
         payload = features.model_dump(by_alias=True)
         input_features = np.array(
@@ -149,13 +219,13 @@ def predict(features: ConstructionCostFeatures):
         ).reshape(1, -1)
 
         prediction = model.predict(input_features)
-
         return {"prediction": float(prediction[0])}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {e}")
-#  endpoint de sante 
+
+
 @app.get("/health")
 def health():
-    """Endpoint de santé pour vérifier si l'API est opérationnelle."""
+    """Health check endpoint."""
     return {"status": "ok"}

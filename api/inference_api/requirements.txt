@@ -1,6 +1,6 @@
-# Project-specific
-
-joblib==1.5.1
-fastapi==0.115.12
-scikit-learn==1.6.1     # Pour utiliser notre modèle
-uvicorn==0.34.3         # Pour lancer notre API
+fastapi>=0.115.0
+uvicorn>=0.34.0
+scikit-learn>=1.6.0
+joblib>=1.5.0
+numpy>=1.26.0
+mlflow>=2.10.0
