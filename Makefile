@@ -1,8 +1,8 @@
 PROJECT_NAME=mlops-construction-cost-prediction
 PROJECT_NAME_DEV=$(PROJECT_NAME)-dev
 
-COMPOSE_PROD = docker compose -f deployments/compose.yaml
-COMPOSE_DEV  = docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml
+COMPOSE_PROD = docker compose -f deployments/compose.prod.yaml
+COMPOSE_DEV  = docker compose -f deployments/compose.prod.yaml -f deployments/compose.dev.yaml
 
 .PHONY: help \
 	start start-dev \
