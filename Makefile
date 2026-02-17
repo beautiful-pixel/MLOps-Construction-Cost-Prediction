@@ -12,6 +12,7 @@ COMPOSE_DEV  = docker compose -f deployments/compose.yaml -f deployments/compose
 	rebuild rebuild-dev \
 	logs logs-dev \
 	ps ps-dev \
+	build-arm \
 	test
 
 help:
@@ -30,6 +31,7 @@ help:
 	@echo "  make logs-dev     Follow dev logs"
 	@echo "  make ps           Show prod services"
 	@echo "  make ps-dev       Show dev services"
+	@echo "  make build-arm    Build ARM64 images with buildx"
 	@echo "  make test         Run unit tests"
 
 start:
@@ -81,5 +83,13 @@ ps-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) ps
 
 
+build-arm:
+	docker buildx build --platform linux/arm64 -t $(PROJECT_NAME)-mlflow -f deployments/mlflow/Dockerfile.mlflow .
+	docker buildx build --platform linux/arm64 -t $(PROJECT_NAME)-airflow -f deployments/airflow/Dockerfile.airflow .
+	docker buildx build --platform linux/arm64 -t $(PROJECT_NAME)-inference -f api/inference_api/Dockerfile .
+	docker buildx build --platform linux/arm64 -t $(PROJECT_NAME)-streamlit -f deployments/streamlit/Dockerfile.streamlit .
+
 test:
 	pytest -v tests/unit/
+
+

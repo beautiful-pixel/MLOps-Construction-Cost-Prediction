@@ -139,46 +139,50 @@ def evaluate_model(
 
     mlflow.start_run(run_id=run_id)
 
-    # Reference evaluation
+    try:
+        # Reference evaluation
 
-    X_ref, y_ref = extract_features_and_target(
-        reference_df,
-        feature_version,
-    )
+        X_ref, y_ref = extract_features_and_target(
+            reference_df,
+            feature_version,
+        )
 
-    ref_predictions = pipeline.predict(X_ref)
-    reference_metrics = compute_metrics(y_ref, ref_predictions)
+        ref_predictions = pipeline.predict(X_ref)
+        reference_metrics = compute_metrics(y_ref, ref_predictions)
 
-    mlflow.log_metrics(
-        {f"reference_{k}": v for k, v in reference_metrics.items()}
-    )
+        mlflow.log_metrics(
+            {f"reference_{k}": v for k, v in reference_metrics.items()}
+        )
 
-    # Optional tests
+        # Optional tests
 
-    optional_dir = (
-        SPLITS_ROOT / f"v{split_version}" / "optional_tests"
-    )
+        optional_dir = (
+            SPLITS_ROOT / f"v{split_version}" / "optional_tests"
+        )
 
-    if optional_dir.exists():
+        if optional_dir.exists():
 
-        for test_path in optional_dir.glob("*.parquet"):
+            for test_path in optional_dir.glob("*.parquet"):
 
-            name = test_path.stem
-            test_df = pd.read_parquet(test_path)
+                name = test_path.stem
+                test_df = pd.read_parquet(test_path)
 
-            if test_df.empty:
-                continue
+                if test_df.empty:
+                    continue
 
-            X_opt, y_opt = extract_features_and_target(
-                test_df,
-                feature_version,
-            )
+                X_opt, y_opt = extract_features_and_target(
+                    test_df,
+                    feature_version,
+                )
 
-            opt_predictions = pipeline.predict(X_opt)
-            opt_metrics = compute_metrics(y_opt, opt_predictions)
+                opt_predictions = pipeline.predict(X_opt)
+                opt_metrics = compute_metrics(y_opt, opt_predictions)
 
-            mlflow.log_metrics(
-                {f"{name}_{k}": v for k, v in opt_metrics.items()}
-            )
+                mlflow.log_metrics(
+                    {f"{name}_{k}": v for k, v in opt_metrics.items()}
+                )
+
+    finally:
+        mlflow.end_run()
 
     logging.info("Evaluation completed successfully")

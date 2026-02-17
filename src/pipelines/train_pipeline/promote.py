@@ -7,14 +7,16 @@ based on reference test metrics.
 Promote candidate if it performs better.
 """
 import logging
+import os
 from typing import Optional
 
 import mlflow
 from mlflow.tracking import MlflowClient
 from mlflow.exceptions import MlflowException, RestException
 
+from utils.mlflow_config import get_model_name
 
-MODEL_NAME = "construction_cost_model"
+
 REFERENCE_METRIC = "reference_rmsle"   # metric used for comparison
 HIGHER_IS_BETTER = False              # True for r2, False for mse
 
@@ -24,12 +26,12 @@ def _get_metric_from_run(run_id: str, metric_name: str) -> Optional[float]:
     run = client.get_run(run_id)
     return run.data.metrics.get(metric_name)
 
-def _get_production_run_id() -> Optional[str]:
+def _get_production_run_id(model_name: str) -> Optional[str]:
     client = MlflowClient()
 
     try:
         versions = client.get_latest_versions(
-            MODEL_NAME,
+            model_name,
             stages=["Production"],
         )
     except MlflowException:
@@ -62,6 +64,7 @@ def promote_if_better(run_id: str) -> bool:
         True if promoted, False otherwise.
     """
 
+    model_name = get_model_name()
     client = MlflowClient()
 
     # Candidate metric
@@ -98,7 +101,7 @@ def promote_if_better(run_id: str) -> bool:
 
     # Register new version
     model_uri = f"runs:/{run_id}/model"
-    result = mlflow.register_model(model_uri, MODEL_NAME)
+    result = mlflow.register_model(model_uri, model_name)
 
     # Move alias
     client.set_registered_model_alias(
@@ -116,15 +119,15 @@ def get_production_model(
     alias: str = "prod",
 ) -> Optional[mlflow.entities.model_registry.ModelVersion]:
     """
-    Récupère la version du modèle pointée par l'alias 'prod'
-    (nouvelle UI MLflow).
+    Retrieve the model version pointed to by the 'prod' alias
+    (new MLflow UI).
 
     Args:
-        model_name: nom du modèle enregistré
-        alias: alias de production (default: "prod")
+        model_name: registered model name
+        alias: production alias (default: "prod")
 
     Returns:
-        ModelVersion ou None si aucun modèle prod n'existe
+        ModelVersion or None if no production model exists
     """
     client = MlflowClient()
 
@@ -150,16 +153,3 @@ def get_production_model(
             alias,
         )
         return None
-
-
-#exemple
-
-# prod_model = get_production_model("my_model")
-
-# if prod_model is None:
-#     logging.info("No model currently in production")
-# else:
-#     print(
-#         f"Prod model → version={prod_model.version}, "
-#         f"run_id={prod_model.run_id}"
-#     )
