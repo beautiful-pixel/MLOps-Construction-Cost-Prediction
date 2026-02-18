@@ -1,0 +1,20 @@
+services:
+  gateway-api:
+    ports:
+      - "${GATEWAY_PORT}:8100"
+
+  streamlit:
+    ports:
+      - "${STREAMLIT_PORT}:8501"
+
+  airflow-webserver:
+    ports:
+      - "${AIRFLOW_PORT}:8080"
+
+  mlflow:
+    ports:
+      - "${MLFLOW_PORT}:5000"
+
+  grafana:
+    ports:
+      - "${GRAFANA_PORT}:3000"

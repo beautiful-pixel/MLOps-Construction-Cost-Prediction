@@ -1,0 +1,113 @@
+groups:
+  - name: solafune-project-alerts
+    interval: 30s
+    rules:
+      # Alerte 1 : API solafune-api indisponible
+      - alert: SolafuneApiDown
+        expr: up{job="solafune-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "L'API Solafune est injoignable."
+          description: "Le job 'solafune-api' est en statut DOWN depuis plus de 1 minute. Veuillez vérifier les conteneurs."
+
+      # Alerte 2 : Nginx reverse proxy indisponible
+      - alert: NginxReverseProxyDown
+        expr: up{job="nginx-exporter"} == 0
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          summary: "Le reverse proxy Nginx est inaccessible."
+          description: "Le job 'nginx-exporter' est down. Les requêtes ne peuvent pas être routées correctement."
+
+      # Alerte 3 : Taux d'erreur HTTP élevé (> 5% d'erreurs 5xx)
+      - alert: HighErrorRateOnApi
+        expr: (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Taux d'erreur API très élevé."
+          description: "Le taux d'erreurs HTTP 5xx sur solafune-api dépasse 5% depuis 3 minutes. Vérifiez les logs de l'application."
+
+      # Alerte 4 : Latence de prédiction élevée (> 5 secondes)
+      - alert: HighPredictionLatency
+        expr: histogram_quantile(0.95, rate(app_prediction_latency_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latence de prédiction anormalement élevée."
+          description: "Le p95 de la latence des prédictions dépasse 5 secondes. Vérifiez la performance du modèle et du serveur."
+
+      # Alerte 5 : Prometheus scrape échec
+      - alert: PrometheusScrapeFailed
+        expr: up{job="prometheus"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus est injoignable."
+          description: "Prometheus lui-même n'est pas accessible depuis plus de 1 minute. Monitoring compromis."
+
+      # Alerte 6 : Utilisation mémoire élevée du conteneur
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Utilisation mémoire élevée (> 80%)."
+          description: "Le conteneur {{ $labels.container_name }} consomme plus de 80% de la mémoire allouée."
+
+      # Alerte 7 : Utilisation CPU élevée
+      - alert: HighCpuUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Utilisation CPU élevée sur {{ $labels.container_name }}."
+          description: "CPU > 80% depuis 3 minutes."
+
+      # Alerte 8 : Nombre de requêtes par seconde anormal
+      - alert: AbnormalRequestRate
+        expr: rate(http_requests_total[5m]) > 1000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nombre de requêtes anormalement élevé."
+          description: "Plus de 1000 req/s détectées. Possible attaque DDoS ?"
+
+      # Alerte 9 : Espace disque faible (< 10%)
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "Espace disque critique (< 10%)."
+          description: "L'espace disque disponible sur {{ $labels.device }} est inférieur à 10%."
+
+      # Alerte 10 : Temps de réponse Nginx élevé
+      - alert: NginxHighResponseTime
+        expr: rate(nginx_http_requests_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Temps de réponse Nginx élevé."
+          description: "Le p95 du temps de réponse Nginx dépasse 2 secondes."
+
+      # Alerte 13 : Trop de connexions ouvertes
+      - alert: TooManyOpenConnections
+        expr: node_sockstat_TCP_inuse > 10000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Trop de connexions TCP ouvertes (> 10k)."
+          description: "Possible fuite mémoire ou attaque réseau."

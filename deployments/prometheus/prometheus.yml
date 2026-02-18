@@ -1,8 +1,20 @@
 global:
-  scrape_interval: 3s
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+rule_files:
+  - "rules/alert_rules.yml"
 
 scrape_configs:
-  - job_name: 'nginx-exporter'
+
+  - job_name: "inference-api"
     static_configs:
-      # Cible à scraper : l'exporter Nginx
-      - targets: ['nginx_exporter:9113']
+      - targets: ["inference-api:8000"]
+
+  - job_name: "gateway-api"
+    static_configs:
+      - targets: ["gateway-api:8100"]
+
+  - job_name: "nginx"
+    static_configs:
+      - targets: ["nginx-exporter:9113"]

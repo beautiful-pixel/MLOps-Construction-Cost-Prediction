@@ -31,8 +31,8 @@ services:
     build:
       context: ..
       dockerfile: deployments/mlflow/Dockerfile.mlflow
-    ports:
-      - "${MLFLOW_PORT:-5000}:5000"
+    expose:
+      - 5000
     environment:
       MLFLOW_EXPERIMENT: ${MLFLOW_EXPERIMENT}
       MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
@@ -64,10 +64,10 @@ services:
   # ---------- Airflow ----------
   airflow-webserver:
     <<: *airflow-common
+    expose:
+      - 8080
     command: webserver
     restart: always
-    ports:
-      - "${AIRFLOW_PORT:-8080}:8080"
     environment:
       <<: *airflow-env
       AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
@@ -87,8 +87,8 @@ services:
     build:
       context: ..
       dockerfile: api/inference_api/Dockerfile
-    ports:
-      - "${INFERENCE_PORT:-8000}:8000"
+    expose:
+      - 8000
     env_file:
       - .env
     environment:
@@ -103,10 +103,14 @@ services:
     build:
       context: ..
       dockerfile: api/gateway_api/Dockerfile
-    ports:
-      - "${GATEWAY_PORT:-8100}:8100"
+    expose:
+      - 8100
     env_file:
       - .env
+    environment:
+      INFERENCE_API_URL: ${INFERENCE_API_URL:-http://inference-api:8000}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+      AIRFLOW_URL: ${AIRFLOW_URL:-http://airflow-webserver:8080}
     depends_on:
       - airflow-webserver
       - mlflow
@@ -116,16 +120,71 @@ services:
     build:
       context: ..
       dockerfile: apps/ml_platform/Dockerfile.streamlit
-    ports:
-      - "${STREAMLIT_PORT:-8501}:8501"
+    expose:
+      - 8501
     env_file:
       - .env
     environment:
-      INFERENCE_API_URL: ${INFERENCE_API_URL:-http://inference-api:8000}
+      BACKEND_API_URL: ${GATEWAY_API_URL:-http://gateway-api:8100}
+    depends_on:
+      - gateway-api
+
+  # ---------- Prometheus ----------
+  prometheus:
+    image: prom/prometheus:latest
+    expose:
+      - 9090
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
     depends_on:
       - inference-api
+      - gateway-api
+      - nginx-exporter
+
+  # ---------- Grafana ----------
+  grafana:
+    image: grafana/grafana:latest
+    expose:
+      - 3000
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # pour permettre l'intégration iframe dans l'app streamlit
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  # ---------- nginx ----------
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    depends_on:
+      - gateway-api
+
+  # ---------- Nginx Prometheus Exporter ----------
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    command:
+      - -nginx.scrape-uri=http://nginx/nginx_status
+    expose:
+      - 9113
+    depends_on:
+      - nginx
+
+
 
 volumes:
   airflow_db:
   airflow_home:
   mlflow_artifacts:
+  grafana_data:
