@@ -60,6 +60,27 @@ def get_required_columns(schema: dict) -> List[str]:
 
     return get_feature_columns(schema) + split + target
 
+def get_ordered_features(version: int) -> List[str]:
+    """
+    Return ordered feature
+    """
+    schema = load_feature_schema(version)
+
+    tabular_features = list(
+        schema.get("tabular_features", {}).keys()
+    )
+    image_features = list(
+        schema.get("image_features", {}).keys()
+    )
+    ordered_features = tabular_features + image_features
+
+    if not ordered_features:
+        raise ValueError(
+            f"No features found in feature schema v{version}"
+        )
+
+    return ordered_features
+
 
 # Validation
 

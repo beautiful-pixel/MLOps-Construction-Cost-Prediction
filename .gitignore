@@ -76,3 +76,4 @@ airflow_home/*.cfg
 __pycache__/
 *.pyc
 
+/sentinel_2_01000_hokkaido_2021-Q3_hardcopy.tif

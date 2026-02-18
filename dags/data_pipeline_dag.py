@@ -110,10 +110,12 @@ def data_pipeline():
 
     preprocess_success = preprocess(batch_id)
 
-    version_master(preprocess_success)
-    version_images(preprocess_success)
+    master_versionning = version_master(preprocess_success)
+    # images_versionning = version_images(preprocess_success)
 
     validate_and_clean_incoming(preprocess_success)
+
+    # master_versionning >> images_versionning
 
 
 data_pipeline()

@@ -24,6 +24,7 @@ from features.feature_schema import (
 )
 
 from training.metrics import compute_metrics
+from models.loader import load_model_from_run
 
 
 # Paths
@@ -31,67 +32,6 @@ from training.metrics import compute_metrics
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REFERENCE_ROOT = PROJECT_ROOT / "data" / "reference" / "tests"
 SPLITS_ROOT = PROJECT_ROOT / "data" / "splits"
-
-
-
-
-
-MLFLOW_ROOT = PROJECT_ROOT / "mlflow_server" / "artifacts"
-
-
-def load_model_from_run(
-    run_id: str,
-    local_mode: bool = False,
-):
-    """
-    Load a sklearn model from an MLflow run.
-
-    If local_mode is False:
-        Uses standard MLflow URI resolution (runs:/).
-
-    If local_mode is True:
-        Resolves model_id from MLflow metadata and loads
-        directly from local filesystem, bypassing artifact API.
-    """
-
-    if not local_mode:
-        model_uri = f"runs:/{run_id}/model"
-        logging.info(f"Loading model via MLflow URI: {model_uri}")
-        return mlflow.sklearn.load_model(model_uri)
-
-    logging.info("Loading model in LOCAL mode (filesystem bypass)")
-
-    client = MlflowClient()
-
-    # Get run to retrieve experiment_id
-    run = client.get_run(run_id)
-    experiment_id = run.info.experiment_id
-
-    # Search logged models linked to this run
-    logged_models = client.search_logged_models(
-        experiment_ids=[experiment_id],
-        filter_string=f"source_run_id = '{run_id}'"
-    )
-
-    if not logged_models:
-        raise ValueError(f"No logged model found for run_id={run_id}")
-
-    model_id = logged_models[0].model_id
-
-    model_path = (
-        MLFLOW_ROOT
-        / experiment_id
-        / "models"
-        / model_id
-        / "artifacts"
-    )
-
-    if not model_path.exists():
-        raise ValueError(f"Local model path not found: {model_path}")
-
-    logging.info(f"Loading model from local path: {model_path}")
-
-    return mlflow.sklearn.load_model(str(model_path))
 
     
 
@@ -116,15 +56,9 @@ def evaluate_model(
     if feature_version not in get_allowed_feature_versions():
         raise ValueError(f"Invalid feature_version: {feature_version}")
 
-    # Load model from MLflow
+    # Load model and reference test
 
-    pipeline = load_model_from_run(
-        run_id=run_id,
-        local_mode=True,   # False en prod
-    )
-
-
-    # Load reference test
+    pipeline = load_model_from_run(run_id=run_id)
 
     reference_path = (
         REFERENCE_ROOT / f"v{split_version}" / "test_reference.parquet"

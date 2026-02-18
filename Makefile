@@ -37,12 +37,12 @@ help:
 start:
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) up -d --build postgres
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) run --rm airflow-init
-	$(COMPOSE_PROD) -p $(PROJECT_NAME) up -d mlflow airflow-webserver airflow-scheduler
+	$(COMPOSE_PROD) -p $(PROJECT_NAME) up -d mlflow airflow-webserver airflow-scheduler inference-api streamlit
 
 start-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --build postgres
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) run --rm airflow-init
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d mlflow airflow-webserver airflow-scheduler
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d mlflow airflow-webserver airflow-scheduler inference-api gateway-api streamlit
 
 stop:
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) down
@@ -50,9 +50,13 @@ stop:
 stop-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) down
 
-restart: stop start
+restart:
+	$(MAKE) stop
+	$(MAKE) start
 
-restart-dev: stop-dev start-dev
+restart-dev:
+	$(MAKE) stop-dev
+	$(MAKE) start-dev
 
 clean:
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) down -v
@@ -60,14 +64,30 @@ clean:
 clean-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) down -v
 
-rebuild:
-	$(MAKE) clean
+build:
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) build --no-cache
+
+build-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache
+
+rebuild:
+	$(MAKE) stop
+	$(MAKE) build
 	$(MAKE) start
 
 rebuild-dev:
+	$(MAKE) stop-dev
+	$(MAKE) build-dev
+	$(MAKE) start-dev
+
+bootstrap:
+	$(MAKE) clean
+	$(MAKE) build
+	$(MAKE) start
+
+bootstrap-dev:
 	$(MAKE) clean-dev
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache
+	$(MAKE) build-dev
 	$(MAKE) start-dev
 
 logs:
@@ -93,3 +113,54 @@ test:
 	pytest -v tests/unit/
 
 
+
+# ----------------------------
+# Service-level rebuild
+# ----------------------------
+
+rebuild-inference-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache inference-api
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate inference-api
+
+rebuild-gateway-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache gateway-api
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate gateway-api
+
+rebuild-streamlit-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache streamlit
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate streamlit
+	
+
+# ----------------------------
+# Service-level logs
+# ----------------------------
+
+logs-inference-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f inference-api
+
+logs-streamlit-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f streamlit
+
+logs-mlflow-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f mlflow
+
+logs-airflow-webserver-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f airflow-webserver
+
+logs-airflow-scheduler-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f airflow-scheduler
+
+
+# restart
+
+restart-inference-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) restart inference-api
+
+restart-streamlit-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) restart streamlit
+
+restart-frontend-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) restart inference-api streamlit
+
+start-frontend-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d inference-api gateway-api streamlit

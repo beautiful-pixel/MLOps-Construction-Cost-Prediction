@@ -142,10 +142,14 @@ def get_reference_hash(split_version: int) -> Optional[str]:
     reference_dir = REFERENCE_ROOT / f"v{split_version}"
     return _get_dvc_hash_from_path(reference_dir)
 
+def get_master_hash() -> Optional[str]:
+    master_path = PROCESSED_ROOT / "master.parquet"
+    return _get_dvc_hash_from_path(master_path)
+
 
 def get_data_lineage(split_version: int) -> Dict[str, Optional[str]]:
     return {
-        "dvc_images_hash": get_images_hash(),
+        "dvc_master_hash": get_master_hash(),
         "dvc_split_hash": get_split_hash(split_version),
         "dvc_reference_hash": get_reference_hash(split_version),
     }  

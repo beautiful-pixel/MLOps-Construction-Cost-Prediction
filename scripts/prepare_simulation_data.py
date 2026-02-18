@@ -32,9 +32,11 @@ def transfer_linked_images(
     batch_df: pd.DataFrame,
     images_out_dir: Path,
     move: bool,
-) -> None:
+) -> set[str]:
     """
     Move or copy only images referenced in batch_df.
+
+    Returns the set of successfully transferred filenames.
     """
 
     images_out_dir.mkdir(parents=True, exist_ok=True)
@@ -47,19 +49,23 @@ def transfer_linked_images(
                 batch_df[col].dropna().astype(str).unique()
             )
 
+    transferred = set()
+
     for filename in referenced_files:
         src = SOURCE_IMAGES / filename
         dst = images_out_dir / filename
 
         if not src.exists():
-            raise FileNotFoundError(
-                f"Referenced image not found in source: {filename}"
-            )
+            continue
 
         if move:
             shutil.move(src, dst)
         else:
             shutil.copy2(src, dst)
+
+        transferred.add(filename)
+
+    return transferred
 
 
 def create_batch(
@@ -75,15 +81,31 @@ def create_batch(
 
     tabular_dir.mkdir(parents=True, exist_ok=True)
 
-    out_csv = tabular_dir / "train_tabular.csv"
-    batch_df.to_csv(out_csv, index=False)
+    batch_df = batch_df.copy()
 
-    if with_images:
-        transfer_linked_images(
+    # Case 1: images disabled → set all image columns to NA
+    if not with_images:
+        for col in IMAGE_COLUMNS:
+            if col in batch_df.columns:
+                batch_df[col] = pd.NA
+
+    # Case 2: images enabled
+    else:
+        transferred = transfer_linked_images(
             batch_df=batch_df,
             images_out_dir=images_dir,
             move=move_images,
         )
+
+        # Replace filenames not successfully transferred with NA
+        for col in IMAGE_COLUMNS:
+            if col in batch_df.columns:
+                batch_df[col] = batch_df[col].apply(
+                    lambda x: x if pd.isna(x) or x in transferred else pd.NA
+                )
+
+    out_csv = tabular_dir / "train_tabular.csv"
+    batch_df.to_csv(out_csv, index=False)
 
     print(f"{batch_name}: {len(batch_df)} rows")
 

@@ -89,25 +89,40 @@ services:
       dockerfile: api/inference_api/Dockerfile
     ports:
       - "${INFERENCE_PORT:-8000}:8000"
+    env_file:
+      - .env
     environment:
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
       MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
+      API_TITLE: ${INFERENCE_API_TITLE}
     volumes:
       - mlflow_artifacts:/mlflow_artifacts
+
+  # ---------- Gateway API ----------
+  gateway-api:
+    build:
+      context: ..
+      dockerfile: api/gateway_api/Dockerfile
+    ports:
+      - "${GATEWAY_PORT:-8100}:8100"
+    env_file:
+      - .env
+    depends_on:
+      - airflow-webserver
+      - mlflow
 
   # ---------- Streamlit ----------
   streamlit:
     build:
       context: ..
-      dockerfile: deployments/streamlit/Dockerfile.streamlit
+      dockerfile: apps/ml_platform/Dockerfile.streamlit
     ports:
       - "${STREAMLIT_PORT:-8501}:8501"
+    env_file:
+      - .env
     environment:
-      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
-      AIRFLOW_URL: ${AIRFLOW_URL:-http://airflow-webserver:8080}
       INFERENCE_API_URL: ${INFERENCE_API_URL:-http://inference-api:8000}
     depends_on:
-      - mlflow
       - inference-api
 
 volumes:
