@@ -81,6 +81,12 @@ def train_model(
     feature_schema = load_feature_schema(feature_version)
     model_schema = load_model_schema(model_version)
 
+    if feature_schema.get("image_features"):
+        raise NotImplementedError(
+            "Image features are defined in the feature schema but are not "
+            "supported by the current training pipeline."
+        )
+
 
     # Load persisted train split
 

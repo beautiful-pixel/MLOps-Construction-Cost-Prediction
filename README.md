@@ -2,7 +2,7 @@
 
 ## Multimodal Learning with Structured Data & Satellite Imagery (Solafune)
 
-This project implements an end-to-end MLOps pipeline for the Construction Cost Prediction challenge (Solafune), combining structured tabular data and satellite imagery to predict construction costs.
+This project implements an end-to-end MLOps pipeline for the Construction Cost Prediction challenge (Solafune). The current training/inference baseline is tabular-only; image ingestion/validation is in place and multimodal modeling is planned.
 
 Beyond model performance, the focus is on building a reproducible, scalable, and production-oriented machine learning system, covering the full lifecycle from data ingestion to monitoring and maintenance.
 
@@ -12,8 +12,8 @@ Beyond model performance, the focus is on building a reproducible, scalable, and
 
 ### Machine Learning Objectives
 
-- Predict construction costs using structured tabular features and satellite images
-- Build a robust multimodal baseline model
+- Predict construction costs using structured tabular features (baseline)
+- Prepare for multimodal modeling by validating and versioning satellite imagery
 - Track and compare experiments reproducibly
 
 ### MLOps Objectives
@@ -134,7 +134,7 @@ mlops_project/
 
 - Cleaning and encoding of structured features
 - Image preprocessing (resizing, normalization)
-- Construction of multimodal datasets
+- Construction of multimodal datasets (planned)
 
 ### 3. Model Training & Experiment Tracking
 

@@ -5,11 +5,12 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.responses import Response
 from prometheus_client import generate_latest, Counter, Histogram, Gauge
 
 from models.loader import load_production_model
+from registry.model_registry import get_model_version_from_alias
 from registry.run_metadata import get_run_config
 from utils.logger import setup_logging
 from inference.schema_builder import build_pydantic_model
@@ -25,13 +26,13 @@ setup_logging("inference_api")
 # Environment configuration
 
 API_TITLE = os.getenv("INFERENCE_API_TITLE", "Inference API")
-MODEL_VERSION = 1
+INFERENCE_INTERNAL_TOKEN = os.getenv("INFERENCE_INTERNAL_TOKEN")
 
 # FastAPI app
 
 app = FastAPI(
     title=API_TITLE,
-    version=str(MODEL_VERSION),
+    version="1.0",
 )
 
 # Prometheus metrics
@@ -51,19 +52,29 @@ model_version_gauge = Gauge(
     "Model version served"
 )
 
-# Set gauge only if numeric
-try:
-    model_version_gauge.set(float(MODEL_VERSION))
-except ValueError:
-    logging.warning("MODEL_VERSION is not numeric, gauge not set.")
-
 
 # Global state (loaded at startup)
 
 model: Optional[object] = None
+served_model_version: Optional[str] = None
 feature_version: Optional[int] = None
 FEATURE_ORDER: Optional[list[str]] = None
 InputModel = None
+
+
+def require_internal_token(authorization: str | None = Header(default=None)):
+    if not INFERENCE_INTERNAL_TOKEN:
+        raise HTTPException(
+            status_code=500,
+            detail="INFERENCE_INTERNAL_TOKEN not configured",
+        )
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    token = authorization.split(" ", 1)[1]
+    if token != INFERENCE_INTERNAL_TOKEN:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 
 # Startup event
@@ -71,6 +82,7 @@ InputModel = None
 @app.on_event("startup")
 def startup_event():
     global model
+    global served_model_version
     global feature_version
     global FEATURE_ORDER
     global InputModel
@@ -81,6 +93,10 @@ def startup_event():
         model_name = get_model_name()
 
         model = load_production_model(model_name=model_name)
+
+        mv = get_model_version_from_alias(model_name, "prod")
+        if mv is not None:
+            served_model_version = str(mv.version)
 
         run_id = getattr(model.metadata, "run_id", None)
         if run_id is None:
@@ -93,6 +109,12 @@ def startup_event():
         FEATURE_ORDER = get_ordered_features(feature_version)
 
         InputModel = build_pydantic_model(feature_version)
+
+        if served_model_version is not None:
+            try:
+                model_version_gauge.set(float(served_model_version))
+            except ValueError:
+                logging.warning("Model version is not numeric, gauge not set.")
 
         logging.info(
             "Model loaded successfully | "
@@ -108,7 +130,7 @@ def startup_event():
 # Prediction endpoint
 
 @app.post("/predict")
-def predict(payload: dict):
+def predict(payload: dict, internal=Depends(require_internal_token)):
 
     if model is None:
         raise HTTPException(
@@ -134,7 +156,7 @@ def predict(payload: dict):
 
         return {
             "prediction": prediction_value,
-            "model_version": MODEL_VERSION,
+            "model_version": served_model_version,
             "feature_version": feature_version,
         }
 
@@ -149,7 +171,7 @@ def predict(payload: dict):
 # Health endpoint
 
 @app.get("/health")
-def health():
+def health(internal=Depends(require_internal_token)):
 
     if model is None:
         return {
@@ -158,7 +180,7 @@ def health():
 
     return {
         "status": "ok",
-        "model_version": MODEL_VERSION,
+        "model_version": served_model_version,
         "feature_version": feature_version,
     }
 
@@ -174,9 +196,8 @@ def metrics():
 
 # Schema endpoint
 @app.get("/schema")
-def get_schema():
+def get_schema(internal=Depends(require_internal_token)):
     if InputModel is None:
         raise HTTPException(status_code=503, detail="Model not initialized")
 
     return InputModel.model_json_schema()
-

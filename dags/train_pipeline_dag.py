@@ -120,8 +120,12 @@ def train_pipeline():
             if reference_created:
                 dvc_add_reference(config["split_version"])
 
-            lineage = get_data_lineage(config["split_version"])
-            mlflow.log_params(lineage)
+            lineage = {
+                k: v for k, v in get_data_lineage(config["split_version"]).items()
+                if v is not None
+            }
+            if lineage:
+                mlflow.log_params(lineage)
 
     # Train model
 

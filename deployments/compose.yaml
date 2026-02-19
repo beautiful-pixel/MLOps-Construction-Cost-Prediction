@@ -95,6 +95,7 @@ services:
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
       MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
       API_TITLE: ${INFERENCE_API_TITLE}
+      INFERENCE_INTERNAL_TOKEN: ${INFERENCE_INTERNAL_TOKEN:-dev-internal-token}
     volumes:
       - mlflow_artifacts:/mlflow_artifacts
 
@@ -111,6 +112,7 @@ services:
       INFERENCE_API_URL: ${INFERENCE_API_URL:-http://inference-api:8000}
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
       AIRFLOW_URL: ${AIRFLOW_URL:-http://airflow-webserver:8080}
+      INFERENCE_INTERNAL_TOKEN: ${INFERENCE_INTERNAL_TOKEN:-dev-internal-token}
     depends_on:
       - airflow-webserver
       - mlflow
@@ -128,6 +130,9 @@ services:
       - .env
     environment:
       GATEWAY_API_URL: ${GATEWAY_API_URL:-http://gateway-api:8100}
+      GRAFANA_URL: ${GRAFANA_URL:-http://grafana:3000}
+      GRAFANA_DASHBOARD_URL: ${GRAFANA_DASHBOARD_URL:-}
+      GRAFANA_ALERTS_URL: ${GRAFANA_ALERTS_URL:-}
     depends_on:
       - gateway-api
 

@@ -5,7 +5,18 @@ import streamlit as st
 
 # Configuration
 
-GATEWAY_API_URL = os.environ["GATEWAY_API_URL"]
+GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
+GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
+
+if not GATEWAY_API_URL:
+    st.error("GATEWAY_API_URL is not set.")
+    st.stop()
+
+
+def auth_headers():
+    if not GATEWAY_API_TOKEN:
+        return {}
+    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
 
 
 
@@ -16,7 +27,8 @@ st.title("Model Inference")
 
 try:
     health_response = requests.get(
-        f"{GATEWAY_API_URL}/health",
+        f"{GATEWAY_API_URL}/info",
+        headers=auth_headers(),
         timeout=3
     )
 
@@ -28,6 +40,9 @@ try:
             f"Model version: {health_data.get('model_version')} | "
             f"Feature version: {health_data.get('feature_version')}"
         )
+    elif health_response.status_code in (401, 403):
+        st.error("Authentication required. Set GATEWAY_API_TOKEN.")
+        st.stop()
     else:
         st.error("API reachable but unhealthy.")
         st.stop()
@@ -42,6 +57,7 @@ except Exception:
 try:
     schema_response = requests.get(
         f"{GATEWAY_API_URL}/schema",
+        headers=auth_headers(),
         timeout=3
     )
 
@@ -143,6 +159,7 @@ with st.form("prediction_form"):
             response = requests.post(
                 f"{GATEWAY_API_URL}/predict",
                 json=payload,
+                headers=auth_headers(),
                 timeout=10
             )
 

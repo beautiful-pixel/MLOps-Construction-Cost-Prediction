@@ -4,7 +4,18 @@ import os
 import requests
 import streamlit as st
 
-GATEWAY_API_URL = os.environ["GATEWAY_API_URL"]
+GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
+GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
+
+if not GATEWAY_API_URL:
+    st.error("GATEWAY_API_URL is not set.")
+    st.stop()
+
+
+def auth_headers():
+    if not GATEWAY_API_TOKEN:
+        return {}
+    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
 
 st.title("Model Schema Admin")
 
@@ -12,7 +23,10 @@ st.title("Model Schema Admin")
 # Load model versions metadata
 
 try:
-    r = requests.get(f"{GATEWAY_API_URL}/configs/model-schemas")
+    r = requests.get(
+        f"{GATEWAY_API_URL}/configs/model-schemas",
+        headers=auth_headers(),
+    )
     model_meta = r.json()
     available_model_versions = model_meta.get("available_model_versions", [])
     default_model_version = model_meta.get("default_model_version")
@@ -24,7 +38,10 @@ except Exception:
 # Load supported model definitions
 
 try:
-    r = requests.get(f"{GATEWAY_API_URL}/configs/model-schemas/supported")
+    r = requests.get(
+        f"{GATEWAY_API_URL}/configs/model-schemas/supported",
+        headers=auth_headers(),
+    )
     supported_models = r.json()
 except Exception:
     st.error("Unable to load supported model definitions")
@@ -51,7 +68,8 @@ selected_model_version = st.selectbox(
 
 try:
     r = requests.get(
-        f"{GATEWAY_API_URL}/configs/model-schemas/{selected_model_version}"
+        f"{GATEWAY_API_URL}/configs/model-schemas/{selected_model_version}",
+        headers=auth_headers(),
     )
     selected_schema = r.json()
     schema_model_type = selected_schema["model"]["type"]
@@ -180,6 +198,7 @@ if st.button("Create New Model Version"):
     r = requests.post(
         f"{GATEWAY_API_URL}/configs/model-schemas",
         json=payload,
+        headers=auth_headers(),
     )
 
     if r.status_code == 200:
@@ -201,6 +220,7 @@ if st.button("Set Selected Version as Default"):
     r = requests.post(
         f"{GATEWAY_API_URL}/configs/model-schemas/default",
         params={"version": selected_model_version},
+        headers=auth_headers(),
     )
 
     if r.status_code == 200:

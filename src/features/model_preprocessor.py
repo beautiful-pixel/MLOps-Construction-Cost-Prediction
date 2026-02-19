@@ -21,6 +21,8 @@ from sklearn.preprocessing import (
     OrdinalEncoder,
     OneHotEncoder,
     FunctionTransformer,
+    StandardScaler,
+    MinMaxScaler,
 )
 from sklearn.impute import SimpleImputer
 
@@ -69,6 +71,17 @@ def build_tabular_model_preprocessor(config: Dict[str, Any]) -> ColumnTransforme
                         FunctionTransformer(clip_fn),
                     )
                 )
+
+            if "scaler" in params:
+                scaler = params["scaler"]
+                if scaler == "standard":
+                    steps.append(("scaler", StandardScaler()))
+                elif scaler == "minmax":
+                    steps.append(("scaler", MinMaxScaler()))
+                else:
+                    raise ValueError(
+                        f"Unsupported scaler '{scaler}' for column '{col}'."
+                    )
 
         elif feature_type == "categorical":
 

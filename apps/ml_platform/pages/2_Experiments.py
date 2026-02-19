@@ -6,7 +6,18 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-GATEWAY_API_URL = os.environ["GATEWAY_API_URL"]
+GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
+GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
+
+if not GATEWAY_API_URL:
+    st.error("GATEWAY_API_URL is not set.")
+    st.stop()
+
+
+def auth_headers():
+    if not GATEWAY_API_TOKEN:
+        return {}
+    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
 
 
 st.title("ML Experiments")
@@ -15,7 +26,10 @@ st.title("ML Experiments")
 prod_model = None
 
 try:
-    prod_response = requests.get(f"{GATEWAY_API_URL}/models/current")
+    prod_response = requests.get(
+        f"{GATEWAY_API_URL}/models/current",
+        headers=auth_headers(),
+    )
     if prod_response.status_code == 200:
         prod_model = prod_response.json()
 except Exception:
@@ -36,7 +50,10 @@ st.divider()
 
 # Fetch experiments
 try:
-    exp_response = requests.get(f"{GATEWAY_API_URL}/experiments/")
+    exp_response = requests.get(
+        f"{GATEWAY_API_URL}/experiments/",
+        headers=auth_headers(),
+    )
     experiments = exp_response.json()
 except Exception as e:
     st.error(f"Cannot reach gateway: {e}")
@@ -59,7 +76,8 @@ experiment_id = experiment_map[selected_exp_name]
 
 # Fetch runs
 runs_response = requests.get(
-    f"{GATEWAY_API_URL}/experiments/{experiment_id}/runs"
+    f"{GATEWAY_API_URL}/experiments/{experiment_id}/runs",
+    headers=auth_headers(),
 )
 
 runs = runs_response.json()
@@ -118,7 +136,8 @@ if st.button("Promote to Production"):
 
     response = requests.post(
         f"{GATEWAY_API_URL}/models/promote",
-        params={"run_id": selected_run}
+        params={"run_id": selected_run},
+        headers=auth_headers(),
     )
 
     if response.status_code == 200:

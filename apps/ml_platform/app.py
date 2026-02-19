@@ -13,10 +13,10 @@ st.set_page_config(
 
 # Configuration
 
-INFERENCE_API_URL = os.getenv(
-    "INFERENCE_API_URL",
-    "http://localhost:8000"
-)
+INFERENCE_API_URL = os.getenv("INFERENCE_API_URL")
+if not INFERENCE_API_URL:
+    st.error("INFERENCE_API_URL is not set.")
+    st.stop()
 
 
 # Title

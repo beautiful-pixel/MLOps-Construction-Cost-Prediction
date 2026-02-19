@@ -6,7 +6,18 @@ import streamlit as st
 import pandas as pd
 import time
 
-GATEWAY_API_URL = os.environ["GATEWAY_API_URL"]
+GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
+GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
+
+if not GATEWAY_API_URL:
+    st.error("GATEWAY_API_URL is not set.")
+    st.stop()
+
+
+def auth_headers():
+    if not GATEWAY_API_TOKEN:
+        return {}
+    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
 
 st.title("Pipeline Control Tower")
 
@@ -30,7 +41,10 @@ if selected_dag == "train_pipeline_dag":
 
     # Load feature schema metadata
     try:
-        r = requests.get(f"{GATEWAY_API_URL}/configs/feature-schemas")
+        r = requests.get(
+            f"{GATEWAY_API_URL}/configs/feature-schemas",
+            headers=auth_headers(),
+        )
         feature_meta = r.json()
 
         available_features = feature_meta["available_feature_versions"]
@@ -56,7 +70,10 @@ if selected_dag == "train_pipeline_dag":
 
     # Load model schema metadata
     try:
-        r = requests.get(f"{GATEWAY_API_URL}/configs/model-schemas")
+        r = requests.get(
+            f"{GATEWAY_API_URL}/configs/model-schemas",
+            headers=auth_headers(),
+        )
         model_meta = r.json()
 
         available_models = model_meta["available_model_versions"]
@@ -77,12 +94,17 @@ if selected_dag == "train_pipeline_dag":
         if default_model in available_models else 0
     )
 
-    split_version = st.text_input("Split version", "1")
+    split_version = st.number_input(
+        "Split version",
+        min_value=1,
+        step=1,
+        value=1,
+    )
 
     conf = {
-        "feature": feature_version,
-        "model": model_version,
-        "split": split_version,
+        "feature_version": int(feature_version),
+        "model_version": int(model_version),
+        "split_version": int(split_version),
     }
 
 
@@ -93,7 +115,8 @@ if st.button("Trigger DAG"):
         json={
             "dag_id": selected_dag,
             "conf": conf,
-        }
+        },
+        headers=auth_headers(),
     )
 
     if response.status_code == 200:
@@ -106,7 +129,8 @@ st.divider()
 
 # Fetch DAG runs
 runs_response = requests.get(
-    f"{GATEWAY_API_URL}/pipeline/dags/{selected_dag}/runs"
+    f"{GATEWAY_API_URL}/pipeline/dags/{selected_dag}/runs",
+    headers=auth_headers(),
 )
 
 runs_data = runs_response.json()
@@ -144,7 +168,8 @@ selected_run = st.selectbox(
 
 # Fetch tasks
 tasks_response = requests.get(
-    f"{GATEWAY_API_URL}/pipeline/dags/{selected_dag}/runs/{selected_run}/tasks"
+    f"{GATEWAY_API_URL}/pipeline/dags/{selected_dag}/runs/{selected_run}/tasks",
+    headers=auth_headers(),
 )
 
 tasks_data = tasks_response.json()

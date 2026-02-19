@@ -41,9 +41,11 @@ tabular_features:
   seismic_hazard_zone:
     encoding: ordinal
     order:
+    - Very Low
     - Low
     - Moderate
     - High
+    - Very High
     type: categorical
   straight_distance_to_capital_km:
     clip:

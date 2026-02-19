@@ -1,10 +1,11 @@
 # Pipeline routes
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Dict, Optional
 
 from services.airflow_client import airflow_service
+from services.security import require_admin
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -17,7 +18,7 @@ class TriggerRequest(BaseModel):
 
 # List dags
 @router.get("/dags")
-def list_dags():
+def list_dags(user=Depends(require_admin)):
     try:
         return airflow_service.list_dags()
     except Exception as e:
@@ -26,7 +27,7 @@ def list_dags():
 
 # Trigger dag
 @router.post("/trigger")
-def trigger_pipeline(request: TriggerRequest):
+def trigger_pipeline(request: TriggerRequest, user=Depends(require_admin)):
     try:
         return airflow_service.trigger_dag(
             dag_id=request.dag_id,
@@ -38,7 +39,7 @@ def trigger_pipeline(request: TriggerRequest):
 
 # List dag runs
 @router.get("/dags/{dag_id}/runs")
-def list_runs(dag_id: str):
+def list_runs(dag_id: str, user=Depends(require_admin)):
     try:
         return airflow_service.list_dag_runs(dag_id)
     except Exception as e:
@@ -47,7 +48,7 @@ def list_runs(dag_id: str):
 
 # List task instances
 @router.get("/dags/{dag_id}/runs/{dag_run_id}/tasks")
-def list_tasks(dag_id: str, dag_run_id: str):
+def list_tasks(dag_id: str, dag_run_id: str, user=Depends(require_admin)):
     try:
         return airflow_service.list_task_instances(dag_id, dag_run_id)
     except Exception as e:

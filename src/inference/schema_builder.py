@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, create_model
-from typing import Literal
+from typing import Literal, Optional
 import re
 from features.feature_schema import load_feature_schema
 from data.data_contract import load_data_contract
@@ -16,6 +16,12 @@ def build_pydantic_model(feature_version: int) -> type[BaseModel]:
     feature_schema = load_feature_schema(feature_version)
     data_contract_version = feature_schema["data_contract"]
     data_schema = load_data_contract(data_contract_version)
+
+    if feature_schema.get("image_features"):
+        raise NotImplementedError(
+            "Image features are defined in the feature schema but are not "
+            "supported by the current inference pipeline."
+        )
 
     tabular_features = feature_schema["tabular_features"]
     contract_columns = data_schema["columns"]
@@ -49,7 +55,11 @@ def build_pydantic_model(feature_version: int) -> type[BaseModel]:
         # Required logic
         is_required = "impute" not in feature_config
 
-        default = ... if is_required else None
+        if is_required:
+            default = ...
+        else:
+            base_type = Optional[base_type]
+            default = None
 
         fields[feature_name] = (
             base_type,

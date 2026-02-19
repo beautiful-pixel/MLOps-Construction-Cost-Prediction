@@ -1,3 +1,4 @@
+import os
 import requests
 
 payload = {
@@ -15,8 +16,12 @@ payload = {
     "seismic_hazard_zone": "Moderate",
 }
 
+INFERENCE_API_URL = os.getenv("INFERENCE_API_URL")
+if not INFERENCE_API_URL:
+    raise SystemExit("INFERENCE_API_URL is not set.")
+
 response = requests.post(
-    "http://localhost:8000/predict",
+    f"{INFERENCE_API_URL}/predict",
     json=payload,
 )
 

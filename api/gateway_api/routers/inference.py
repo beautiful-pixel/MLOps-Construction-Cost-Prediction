@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict, Any
 from services.inference_client import predict, get_schema
+from services.security import require_user
 
 router = APIRouter(tags=["inference"])
 
 
 @router.post("/predict")
-def proxy_predict(payload: Dict[str, Any]):
+def proxy_predict(payload: Dict[str, Any], user=Depends(require_user)):
     try:
         return predict(payload)
     except Exception:
@@ -14,7 +15,7 @@ def proxy_predict(payload: Dict[str, Any]):
 
 
 @router.get("/schema")
-def proxy_schema():
+def proxy_schema(user=Depends(require_user)):
     try:
         return get_schema()
     except Exception:

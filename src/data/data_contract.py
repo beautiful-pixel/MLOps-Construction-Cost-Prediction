@@ -220,15 +220,24 @@ def _validate_type(
     expected_type = rules.get("type")
 
     if expected_type == "int":
-        if not pd.api.types.is_integer_dtype(series):
-            raise TypeError(f"Column '{col}' must be integer.")
+        if pd.api.types.is_integer_dtype(series):
+            return
+        if pd.api.types.is_float_dtype(series):
+            values = series.dropna()
+            if (values % 1 != 0).any():
+                raise TypeError(f"Column '{col}' must be integer.")
+            return
+        raise TypeError(f"Column '{col}' must be integer.")
 
     elif expected_type == "float":
-        if not pd.api.types.is_float_dtype(series):
+        if not pd.api.types.is_numeric_dtype(series):
             raise TypeError(f"Column '{col}' must be float.")
 
     elif expected_type == "string":
-        if not pd.api.types.is_string_dtype(series):
+        if not (
+            pd.api.types.is_string_dtype(series)
+            or pd.api.types.is_object_dtype(series)
+        ):
             raise TypeError(f"Column '{col}' must be string.")
 
     else:

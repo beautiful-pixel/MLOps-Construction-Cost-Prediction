@@ -1,16 +1,17 @@
 import os
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from datetime import datetime
 from pathlib import Path
 
 from typing import Dict, Optional
+from services.security import require_admin
 
 router = APIRouter(prefix="/configs", tags=["configs"])
 
-CONFIG_ROOT = Path("/opt/project/configs/features")
-DATA_CONTRACT_ROOT = Path("/opt/project/configs/data_contracts")
+CONFIG_ROOT = Path("/app/configs/features")
+DATA_CONTRACT_ROOT = Path("/app/configs/data_contracts")
 
 
 # -------------------------
@@ -28,7 +29,7 @@ class FeatureOptions(BaseModel):
 
 class FeatureSchemaRequest(BaseModel):
     data_contract_version: int
-    target: str
+    target: Optional[str] = None
     features: Dict[str, FeatureOptions]
 
 
@@ -59,10 +60,7 @@ def get_next_version():
 def validate_feature_schema(payload: FeatureSchemaRequest):
 
     contract = load_data_contract(payload.data_contract_version)
-    contract_columns = contract["features"]
-
-    if payload.target not in contract_columns:
-        raise HTTPException(400, "Target not in data contract")
+    contract_columns = contract["columns"]
 
     for name, config in payload.features.items():
 
@@ -93,7 +91,7 @@ def validate_feature_schema(payload: FeatureSchemaRequest):
 # -------------------------
 
 @router.post("/features")
-def create_feature_schema(payload: FeatureSchemaRequest):
+def create_feature_schema(payload: FeatureSchemaRequest, user=Depends(require_admin)):
 
     validate_feature_schema(payload)
 
@@ -102,9 +100,9 @@ def create_feature_schema(payload: FeatureSchemaRequest):
     output = {
         "version": version,
         "created_at": datetime.utcnow().isoformat(),
-        "data_contract_version": payload.data_contract_version,
-        "target": payload.target,
-        "features": payload.features
+        "data_contract": payload.data_contract_version,
+        "tabular_features": payload.features,
+        "image_features": {},
     }
 
     path = CONFIG_ROOT / f"v{version}.yaml"
