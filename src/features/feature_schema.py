@@ -9,19 +9,15 @@ versioned feature configurations:
 - Validating dataframe structure and content
 - Extracting X and y for modeling
 
-Tabular features only (v1).
+Feature schema references a data contract.
+Target is defined in the data contract.
 """
 
-from pathlib import Path
 from typing import Tuple, List, Dict
 import pandas as pd
 
 from utils.versioned_config import load_versioned_yaml, get_available_versions
-
-# Paths
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-FEATURE_CONFIG_DIR = PROJECT_ROOT / "configs" / "features"
+from data.data_contract import get_target_column, load_data_contract
 
 
 # Version utilities
@@ -32,6 +28,34 @@ def get_allowed_feature_versions() -> List[int]:
     """
     return get_available_versions("features")
 
+
+def get_feature_versions_for_contract(contract_version: int) -> List[int]:
+    """
+    Return feature versions attached to a given data contract version.
+    """
+
+    versions = get_allowed_feature_versions()
+    valid_versions = []
+
+    for v in versions:
+        schema = load_feature_schema(v)
+
+        if schema.get("data_contract") == contract_version:
+            valid_versions.append(v)
+
+    return sorted(valid_versions)
+
+def get_next_feature_version() -> int:
+    """
+    Return next feature version number (incremental).
+    """
+
+    versions = get_allowed_feature_versions()
+
+    if not versions:
+        return 1
+
+    return max(versions) + 1
 
 # Loading
 
@@ -46,32 +70,37 @@ def load_feature_schema(version: int) -> Dict:
 
 def get_feature_columns(schema: dict) -> List[str]:
     """
-    Return ordered tabular feature columns (excluding target).
+    Return ordered tabular feature columns.
     """
     return list(schema.get("tabular_features", {}).keys())
 
 
 def get_required_columns(schema: dict) -> List[str]:
     """
-    Return all required columns including target and optional split columns.
+    Return required columns including features,
+    optional split columns, and target.
     """
-    target = [schema["target"]]
+    contract_version = schema["data_contract"]
+    target = [get_target_column(contract_version)]
     split = schema.get("split_columns", [])
 
     return get_feature_columns(schema) + split + target
 
+
 def get_ordered_features(version: int) -> List[str]:
     """
-    Return ordered feature
+    Return ordered features (tabular + image).
     """
     schema = load_feature_schema(version)
 
     tabular_features = list(
         schema.get("tabular_features", {}).keys()
     )
+
     image_features = list(
         schema.get("image_features", {}).keys()
     )
+
     ordered_features = tabular_features + image_features
 
     if not ordered_features:
@@ -93,7 +122,13 @@ def validate_dataframe(
     Validate dataframe against a versioned feature schema.
     """
 
+    if df.empty:
+        raise ValueError("Input dataframe is empty.")
+
     schema = load_feature_schema(version)
+
+    # Validate contract consistency
+    _validate_feature_contract_consistency(schema)
 
     required = set(get_required_columns(schema))
     actual = set(df.columns)
@@ -110,13 +145,35 @@ def validate_dataframe(
     _validate_tabular_features(df, schema)
 
 
+def _validate_feature_contract_consistency(schema: dict) -> None:
+    """
+    Ensure feature schema is consistent with referenced data contract.
+    """
+
+    contract_version = schema.get("data_contract")
+
+    if contract_version is None:
+        raise ValueError("Feature schema must define 'data_contract'.")
+
+    contract = load_data_contract(contract_version)
+
+    contract_columns = set(contract["columns"].keys())
+    feature_columns = set(schema.get("tabular_features", {}).keys())
+
+    invalid = feature_columns - contract_columns
+
+    if invalid:
+        raise ValueError(
+            f"Feature schema references columns not in data contract: {invalid}"
+        )
+
+
 def _validate_tabular_features(df: pd.DataFrame, schema: dict) -> None:
     """
     Validate tabular features based on type and encoding.
     """
 
     tabular_cfg = schema.get("tabular_features", {})
-
     allowed_encodings = {"binary", "ordinal", "onehot"}
 
     for col, params in tabular_cfg.items():
@@ -148,7 +205,6 @@ def _validate_tabular_features(df: pd.DataFrame, schema: dict) -> None:
                     f"Allowed encodings: {allowed_encodings}"
                 )
 
-            # Validate allowed values if order is provided
             if encoding == "ordinal":
                 if "order" not in params:
                     raise ValueError(
@@ -163,7 +219,6 @@ def _validate_tabular_features(df: pd.DataFrame, schema: dict) -> None:
                         f"Column '{col}' contains invalid ordinal values: {invalid}"
                     )
 
-            # Optional: strict binary validation if order provided
             if encoding == "binary" and "order" in params:
                 allowed = set(params["order"])
                 invalid = set(df[col].dropna().unique()) - allowed
@@ -192,6 +247,7 @@ def extract_features_and_target(
 ) -> Tuple[pd.DataFrame, pd.Series]:
     """
     Extract X and y using a versioned feature schema.
+    Target is loaded from the referenced data contract.
     """
 
     if df.empty:
@@ -199,8 +255,10 @@ def extract_features_and_target(
 
     schema = load_feature_schema(version)
 
+    contract_version = schema["data_contract"]
+    target_col = get_target_column(contract_version)
+
     feature_cols = get_feature_columns(schema)
-    target_col = schema["target"]
 
     missing_features = set(feature_cols) - set(df.columns)
     if missing_features:
@@ -215,3 +273,91 @@ def extract_features_and_target(
     y = df[target_col]
 
     return X, y
+
+
+# Schema definition validation
+
+def validate_feature_schema_definition(schema: Dict) -> None:
+    """
+    Validate structure and integrity of a feature schema definition.
+
+    Used when creating a new feature version via API.
+    """
+
+    # Required top-level keys
+    required_keys = {"version", "data_contract", "tabular_features"}
+
+    missing = required_keys - set(schema.keys())
+    if missing:
+        raise ValueError(
+            f"Missing required keys in feature schema: {missing}"
+        )
+
+    # Validate data contract exists
+    contract_version = schema["data_contract"]
+
+    try:
+        contract = load_data_contract(contract_version)
+    except Exception:
+        raise ValueError(
+            f"Referenced data_contract v{contract_version} does not exist."
+        )
+
+    contract_columns = set(contract["columns"].keys())
+
+    tabular_features = schema.get("tabular_features", {})
+
+    if not tabular_features:
+        raise ValueError("Feature schema must define at least one tabular feature.")
+
+    allowed_feature_types = {"numeric", "categorical"}
+    allowed_encodings = {"binary", "ordinal", "onehot"}
+
+    for col, params in tabular_features.items():
+
+        # Column must exist in data contract
+        if col not in contract_columns:
+            raise ValueError(
+                f"Feature '{col}' not found in data contract."
+            )
+
+        # Type required
+        feature_type = params.get("type")
+        if feature_type not in allowed_feature_types:
+            raise ValueError(
+                f"Feature '{col}' has invalid type '{feature_type}'. "
+                f"Allowed types: {allowed_feature_types}"
+            )
+
+        # Numeric checks
+        if feature_type == "numeric":
+            # Nothing mandatory beyond type
+            pass
+
+        # Categorical checks
+        if feature_type == "categorical":
+
+            encoding = params.get("encoding")
+            if encoding not in allowed_encodings:
+                raise ValueError(
+                    f"Feature '{col}' has invalid encoding '{encoding}'. "
+                    f"Allowed encodings: {allowed_encodings}"
+                )
+
+            if encoding == "ordinal":
+                if "order" not in params:
+                    raise ValueError(
+                        f"Ordinal feature '{col}' must define 'order'."
+                    )
+
+                if not isinstance(params["order"], list):
+                    raise ValueError(
+                        f"'order' for feature '{col}' must be a list."
+                    )
+
+    # Optional: ensure no target defined in feature schema
+    if "target" in schema:
+        raise ValueError(
+            "Feature schema must not define 'target'. "
+            "Target is defined in the data contract."
+        )

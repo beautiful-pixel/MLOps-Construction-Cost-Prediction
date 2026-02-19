@@ -42,7 +42,7 @@ start:
 start-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --build postgres
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) run --rm airflow-init
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d mlflow airflow-webserver airflow-scheduler inference-api gateway-api streamlit
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d
 
 stop:
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) down
@@ -126,10 +126,21 @@ rebuild-gateway-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache gateway-api
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate gateway-api
 
+build-gateway-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache gateway-api	
+
 rebuild-streamlit-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache streamlit
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate streamlit
+
 	
+rebuild-prometheus-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache prometheus
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate prometheus
+
+rebuild-grafana-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache grafana
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate grafana
 
 # ----------------------------
 # Service-level logs
@@ -164,3 +175,10 @@ restart-frontend-dev:
 
 start-frontend-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d inference-api gateway-api streamlit
+
+
+restart-nginx-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate nginx
+
+start-nginx-dev:
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d

@@ -5,7 +5,7 @@ import streamlit as st
 
 # Configuration
 
-API_URL = os.getenv("BACKEND_API_URL", "http://localhost:8100")
+GATEWAY_API_URL = os.environ["GATEWAY_API_URL"]
 
 
 
@@ -16,7 +16,7 @@ st.title("Model Inference")
 
 try:
     health_response = requests.get(
-        f"{API_URL}/health",
+        f"{GATEWAY_API_URL}/health",
         timeout=3
     )
 
@@ -41,7 +41,7 @@ except Exception:
 
 try:
     schema_response = requests.get(
-        f"{API_URL}/schema",
+        f"{GATEWAY_API_URL}/schema",
         timeout=3
     )
 
@@ -141,7 +141,7 @@ with st.form("prediction_form"):
 
         try:
             response = requests.post(
-                f"{API_URL}/predict",
+                f"{GATEWAY_API_URL}/predict",
                 json=payload,
                 timeout=10
             )
@@ -167,4 +167,4 @@ with st.form("prediction_form"):
 
 
 with st.expander("API Details"):
-    st.write(f"Endpoint: {API_URL}/predict")
+    st.write(f"Endpoint: {GATEWAY_API_URL}/predict")

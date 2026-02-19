@@ -2,8 +2,6 @@ version: 1
 
 data_contract: 1
 
-target: construction_cost_per_m2_usd
-
 tabular_features:
   deflated_gdp_usd:
     type: numeric

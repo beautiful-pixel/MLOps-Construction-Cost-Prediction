@@ -1,23 +1,6 @@
-# Core
-numpy<2
-pandas
-scipy
-pyyaml
-
-# ML
-scikit-learn
-lightgbm
-xgboost
-statsmodels
-
-# Data versioning
-dvc
-dvc-s3
-
-# Progress & reporting
-tqdm
-tabulate
-
-# Visualization
-matplotlib
-seaborn
+dvc>=3.66.1
+joblib>=1.5.3
+mlflow>=3.9.0
+pandas>=2.3.3
+pytest>=9.0.2
+rasterio>=1.4.4

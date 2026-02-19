@@ -18,7 +18,7 @@ import pandas as pd
 
 from utils.io import atomic_write_parquet
 
-from splitting.split_schema import get_allowed_versions, generate_split
+from splitting.split_schema import get_allowed_split_versions, generate_split
 
 
 # Paths
@@ -60,10 +60,10 @@ def run_split_pipeline(split_version: int) -> bool:
 
     # Validate split version
 
-    if split_version not in get_allowed_versions():
+    if split_version not in get_allowed_split_versions():
         raise ValueError(
             f"Split version {split_version} not available. "
-            f"Allowed versions: {get_allowed_versions()}"
+            f"Allowed versions: {get_allowed_split_versions()}"
         )
 
     # Load master dataset

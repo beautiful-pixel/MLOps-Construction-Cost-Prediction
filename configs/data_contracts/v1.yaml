@@ -123,6 +123,8 @@ columns:
 primary_key:
   - data_id
 
+target: construction_cost_per_m2_usd
+
 deduplication:
   subset:
     - data_id

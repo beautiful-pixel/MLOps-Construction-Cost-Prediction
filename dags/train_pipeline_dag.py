@@ -17,7 +17,7 @@ from utils.active_config import (
     get_default_model_version,
 )
 
-from splitting.split_schema import get_allowed_versions as get_allowed_split_versions
+from splitting.split_schema import get_allowed_split_versions
 from features.feature_schema import get_allowed_feature_versions
 from models.model_schema import get_allowed_model_versions
 

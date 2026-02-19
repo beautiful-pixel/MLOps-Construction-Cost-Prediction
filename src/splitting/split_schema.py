@@ -34,13 +34,29 @@ from .split_strategies import geographic_split
 
 # Version utilities
 
-def get_allowed_versions() -> List[int]:
+def get_allowed_split_versions() -> List[int]:
     """
     Return available split schema versions.
     Example:
         [1, 2]
     """
     return get_available_versions("splits")
+
+def get_split_versions_for_contract(contract_version: int) -> list[int]:
+    """
+    Return split versions attached to a given data contract version.
+    """
+
+    versions = get_allowed_split_versions()
+    valid_versions = []
+
+    for v in versions:
+        schema = load_split_schema(v)
+
+        if schema.get("data_contract") == contract_version:
+            valid_versions.append(v)
+
+    return sorted(valid_versions)
 
 
 # Loading
@@ -114,3 +130,4 @@ def generate_split(
         return geographic_split(df, config, version)
 
     raise ValueError(f"Unknown split strategy '{strategy}' in split config version {version}.")
+

@@ -8,6 +8,7 @@ Responsibilities:
 - Load a data contract by version
 - Validate dataframe structure and constraints
 - Enforce primary key integrity
+- Validate target definition
 - Expose deduplication rules
 
 The data contract defines the structural integrity
@@ -17,19 +18,10 @@ for schema validation.
 
 from pathlib import Path
 from typing import Dict, List
-import yaml
 import pandas as pd
 import re
 
-
-# Paths
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DATA_CONTRACT_DIR = PROJECT_ROOT / "configs" / "data_contracts"
-
-
 from utils.versioned_config import load_versioned_yaml, get_available_versions
-
 
 
 # Version utilities
@@ -49,7 +41,8 @@ def load_data_contract(version: int) -> Dict:
     """
     return load_versioned_yaml("data_contracts", version)
 
-# Validation
+
+# Validation entrypoint
 
 def validate_dataframe(
     df: pd.DataFrame,
@@ -63,8 +56,7 @@ def validate_dataframe(
     - Column presence
     - Column constraints (type, range, format, allowed values)
     - Primary key integrity
-
-    Raises an error if validation fails.
+    - Target integrity
     """
 
     if df.empty:
@@ -75,7 +67,10 @@ def validate_dataframe(
     _validate_columns(df, contract, strict_columns)
     _validate_column_constraints(df, contract)
     _validate_primary_key(df, contract)
+    _validate_target_definition(contract)
 
+
+# Column presence validation
 
 def _validate_columns(
     df: pd.DataFrame,
@@ -97,6 +92,8 @@ def _validate_columns(
             raise ValueError(f"Unexpected columns present: {unexpected}")
 
 
+# Column constraint validation
+
 def _validate_column_constraints(
     df: pd.DataFrame,
     contract: Dict,
@@ -112,16 +109,17 @@ def _validate_column_constraints(
             if series.isna().any():
                 raise ValueError(f"Column '{col}' contains null values.")
 
-        # Type
+        # Type validation
         _validate_type(col, series, rules)
 
-        # Min / Max
+        # Min constraint
         if "min" in rules:
             if (series.dropna() < rules["min"]).any():
                 raise ValueError(
                     f"Column '{col}' contains values below min {rules['min']}"
                 )
 
+        # Max constraint
         if "max" in rules:
             if (series.dropna() > rules["max"]).any():
                 raise ValueError(
@@ -137,7 +135,7 @@ def _validate_column_constraints(
                     f"Column '{col}' contains invalid values: {invalid}"
                 )
 
-        # Regex
+        # Regex format
         if "format" in rules:
             pattern = re.compile(rules["format"])
             invalid_mask = series.dropna().astype(str).apply(
@@ -148,6 +146,8 @@ def _validate_column_constraints(
                     f"Column '{col}' contains values not matching regex."
                 )
 
+
+# Primary key validation
 
 def _validate_primary_key(
     df: pd.DataFrame,
@@ -160,11 +160,13 @@ def _validate_primary_key(
     if not primary_key:
         return
 
+    # Null check
     if df[primary_key].isna().any().any():
         raise ValueError(
             f"Primary key columns {primary_key} contain null values."
         )
 
+    # Duplicate check
     duplicates = df.duplicated(subset=primary_key, keep=False)
 
     if duplicates.any():
@@ -174,6 +176,39 @@ def _validate_primary_key(
             f"Duplicate values found:\n{duplicated_rows}"
         )
 
+
+# Target validation
+
+def _validate_target_definition(contract: Dict) -> None:
+    """
+    Validate target configuration integrity.
+    """
+
+    target = contract.get("target")
+
+    if not target:
+        raise ValueError("No target defined in data contract.")
+
+    if target not in contract["columns"]:
+        raise ValueError(
+            f"Target '{target}' not defined in contract columns."
+        )
+
+    # Target must be non-nullable
+    if not contract["columns"][target].get("non_nullable", False):
+        raise ValueError(
+            f"Target column '{target}' must be non_nullable."
+        )
+
+    # Target cannot be part of primary key
+    primary_key = contract.get("primary_key", [])
+    if target in primary_key:
+        raise ValueError(
+            f"Target column '{target}' cannot be part of primary key."
+        )
+
+
+# Type validation
 
 def _validate_type(
     col: str,
@@ -216,3 +251,24 @@ def get_deduplication_rules(version: int) -> Dict:
     """
     contract = load_data_contract(version)
     return contract.get("deduplication", {})
+
+
+def get_target_column(version: int) -> str:
+    """
+    Return target column for a given contract version.
+    """
+    contract = load_data_contract(version)
+
+    target = contract.get("target")
+
+    if not target:
+        raise ValueError(
+            f"No target defined in data contract v{version}."
+        )
+
+    if target not in contract["columns"]:
+        raise ValueError(
+            f"Target '{target}' not defined in contract columns."
+        )
+
+    return target

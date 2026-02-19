@@ -21,6 +21,10 @@ from pathlib import Path
 from typing import Dict
 import yaml
 
+from features.feature_schema import get_feature_versions_for_contract
+from models.model_schema import get_allowed_model_versions
+from splitting.split_schema import get_split_versions_for_contract
+
 
 # Paths
 
@@ -118,3 +122,80 @@ def get_default_model_version() -> int:
     """
     config = load_active_config()
     return config["training_defaults"]["model_version"]
+
+
+def get_available_feature_versions_for_active_contract() -> list[int]:
+    """
+    Return feature versions attached to the active data contract.
+    """
+    contract_version = get_active_data_contract_version()
+    return get_feature_versions_for_contract(contract_version)
+
+
+def _update_training_default(key: str, version: int) -> None:
+    """
+    Generic helper to update a training default version.
+    """
+
+    config = load_active_config()
+
+    if "training_defaults" not in config:
+        config["training_defaults"] = {}
+
+    config["training_defaults"][key] = version
+
+    with open(ACTIVE_CONFIG_PATH, "w") as f:
+        yaml.dump(config, f)
+
+def set_default_feature_version(version: int) -> None:
+    """
+    Update default feature version.
+
+    Ensures compatibility with active data contract.
+    """
+
+    contract_version = get_active_data_contract_version()
+    available = get_feature_versions_for_contract(contract_version)
+
+    if version not in available:
+        raise ValueError(
+            f"Feature version {version} "
+            f"is not compatible with active data contract."
+        )
+
+    _update_training_default("feature_version", version)
+
+def set_default_split_version(version: int) -> None:
+    """
+    Update default split version.
+
+    Ensures compatibility with active data contract.
+    """
+
+    contract_version = get_active_data_contract_version()
+    available = get_split_versions_for_contract(contract_version)
+
+    if version not in available:
+        raise ValueError(
+            f"Split version {version} "
+            f"is not compatible with active data contract."
+        )
+
+    _update_training_default("split_version", version)
+
+
+def set_default_model_version(version: int) -> None:
+    """
+    Update default model version.
+    """
+
+    available = get_allowed_model_versions()
+
+    if version not in available:
+        raise ValueError(
+            f"Model version {version} does not exist."
+        )
+
+    _update_training_default("model_version", version)
+
+

@@ -114,6 +114,8 @@ services:
     depends_on:
       - airflow-webserver
       - mlflow
+    volumes:
+      - ../configs:/app/configs
 
   # ---------- Streamlit ----------
   streamlit:
@@ -125,7 +127,7 @@ services:
     env_file:
       - .env
     environment:
-      BACKEND_API_URL: ${GATEWAY_API_URL:-http://gateway-api:8100}
+      GATEWAY_API_URL: ${GATEWAY_API_URL:-http://gateway-api:8100}
     depends_on:
       - gateway-api
 

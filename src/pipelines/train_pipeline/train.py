@@ -21,7 +21,7 @@ import mlflow.sklearn
 
 from sklearn.pipeline import Pipeline
 
-from splitting.split_schema import get_allowed_versions as get_allowed_split_versions
+from splitting.split_schema import get_allowed_split_versions
 from features.feature_schema import (
     get_allowed_feature_versions,
     extract_features_and_target,
@@ -115,10 +115,6 @@ def train_model(
     mlflow.start_run(run_id=run_id)
 
     try:
-        # Log versions (redundant but safe)
-        mlflow.log_param("split_version", split_version)
-        mlflow.log_param("feature_version", feature_version)
-        mlflow.log_param("model_version", model_version)
 
         mlflow.log_param("model_type", model_schema["model"]["type"])
         mlflow.log_params(model_schema["model"].get("params", {}))
