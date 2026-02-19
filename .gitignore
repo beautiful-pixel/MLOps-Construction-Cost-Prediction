@@ -57,6 +57,15 @@ data/*
 # Docker
 **/.dockerignore
 
+# Secrets / credentials
+**/.htpasswd
+deployments/nginx/.htpasswd
+deployments/nginx/certs/*.key
+deployments/nginx/certs/*.crt
+deployments/nginx/certs/*.pem
+deployments/nginx/certs/*.p12
+deployments/nginx/certs/*.pfx
+
 # OS
 .DS_Store
 Thumbs.db
