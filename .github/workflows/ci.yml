@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
       - name: Checkout repository
@@ -29,10 +31,10 @@ jobs:
           pytest
 
       - name: Slack
-        if: ${{ always() && secrets.SLACK_WEBHOOK_URL }}
+        if: ${{ always() && env.SLACK_WEBHOOK_URL }}
         run: |
           STATUS="${{ job.status }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -X POST -H 'Content-type: application/json' \
             --data "{\"text\":\"Workflow *${{ github.workflow }}* (${STATUS})\nRepo: ${{ github.repository }}\nRun: ${RUN_URL}\"}" \
-            "${{ secrets.SLACK_WEBHOOK_URL }}"
+            "${SLACK_WEBHOOK_URL}"
