@@ -29,7 +29,7 @@ jobs:
           pytest
 
       - name: Slack
-        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        if: ${{ always() && secrets.SLACK_WEBHOOK_URL }}
         run: |
           STATUS="${{ job.status }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
