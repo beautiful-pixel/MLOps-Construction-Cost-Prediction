@@ -1,22 +1,17 @@
-import os
 import requests
 import streamlit as st
+from streamlit_auth import (
+    assert_response_ok,
+    auth_headers,
+    get_gateway_api_url,
+    require_auth,
+)
 
 
 # Configuration
 
-GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
-GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
-
-if not GATEWAY_API_URL:
-    st.error("GATEWAY_API_URL is not set.")
-    st.stop()
-
-
-def auth_headers():
-    if not GATEWAY_API_TOKEN:
-        return {}
-    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
+GATEWAY_API_URL = get_gateway_api_url()
+require_auth()
 
 
 
@@ -41,14 +36,20 @@ try:
             f"Feature version: {health_data.get('feature_version')}"
         )
     elif health_response.status_code in (401, 403):
-        st.error("Authentication required. Set GATEWAY_API_TOKEN.")
+        st.error(
+            "Authentication required. "
+            "Login with user / user123 or admin / admin."
+        )
+        st.stop()
+    elif health_response.status_code == 404:
+        st.warning("No production model found.")
         st.stop()
     else:
         st.error("API reachable but unhealthy.")
         st.stop()
 
 except Exception:
-    st.error("Inference API not reachable.")
+    st.error("Gateway API not reachable.")
     st.stop()
 
 
@@ -61,9 +62,7 @@ try:
         timeout=3
     )
 
-    if schema_response.status_code != 200:
-        st.error("Unable to retrieve model schema from API.")
-        st.stop()
+    assert_response_ok(schema_response)
 
     model_schema = schema_response.json()
 
@@ -177,7 +176,13 @@ with st.form("prediction_form"):
                 st.json(result)
 
             else:
-                st.error(response.text)
+                if response.status_code in (401, 403):
+                    st.error(
+                        "Authentication required. "
+                        "Login with user / user123 or admin / admin."
+                    )
+                else:
+                    st.error(response.text)
 
         except Exception as e:
             st.error(f"Request error: {e}")

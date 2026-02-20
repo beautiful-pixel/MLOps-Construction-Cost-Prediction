@@ -1,23 +1,18 @@
 # Pipeline control tower
 
-import os
 import requests
 import streamlit as st
 import pandas as pd
 import time
+from streamlit_auth import (
+    assert_response_ok,
+    auth_headers,
+    get_gateway_api_url,
+    require_auth,
+)
 
-GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
-GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
-
-if not GATEWAY_API_URL:
-    st.error("GATEWAY_API_URL is not set.")
-    st.stop()
-
-
-def auth_headers():
-    if not GATEWAY_API_TOKEN:
-        return {}
-    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
+GATEWAY_API_URL = get_gateway_api_url()
+require_auth()
 
 st.title("Pipeline Control Tower")
 
@@ -45,6 +40,7 @@ if selected_dag == "train_pipeline_dag":
             f"{GATEWAY_API_URL}/configs/feature-schemas",
             headers=auth_headers(),
         )
+        assert_response_ok(r, admin_only=True)
         feature_meta = r.json()
 
         available_features = feature_meta["available_feature_versions"]
@@ -74,6 +70,7 @@ if selected_dag == "train_pipeline_dag":
             f"{GATEWAY_API_URL}/configs/model-schemas",
             headers=auth_headers(),
         )
+        assert_response_ok(r, admin_only=True)
         model_meta = r.json()
 
         available_models = model_meta["available_model_versions"]
@@ -123,6 +120,8 @@ if st.button("Trigger DAG"):
         st.success("DAG triggered successfully")
         st.rerun()
     else:
+        if response.status_code in (401, 403):
+            assert_response_ok(response, admin_only=True)
         st.error(response.text)
 
 st.divider()
@@ -132,6 +131,7 @@ runs_response = requests.get(
     f"{GATEWAY_API_URL}/pipeline/dags/{selected_dag}/runs",
     headers=auth_headers(),
 )
+assert_response_ok(runs_response, admin_only=True)
 
 runs_data = runs_response.json()
 runs = runs_data.get("dag_runs", [])
@@ -171,6 +171,7 @@ tasks_response = requests.get(
     f"{GATEWAY_API_URL}/pipeline/dags/{selected_dag}/runs/{selected_run}/tasks",
     headers=auth_headers(),
 )
+assert_response_ok(tasks_response, admin_only=True)
 
 tasks_data = tasks_response.json()
 tasks = tasks_data.get("task_instances", [])
