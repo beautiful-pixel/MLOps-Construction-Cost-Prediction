@@ -1,24 +1,14 @@
-"""
-Ingestion utilities.
-
-Each CSV file inside data/incoming/ becomes its own batch:
-
-incoming/file.csv
-    ↓
-raw/<batch_id>/file.csv
-
-Returns:
-    List[str]: Created batch IDs.
-"""
-
 from pathlib import Path
 from datetime import datetime
 from uuid import uuid4
-from typing import List
 import shutil
 import logging
+import time
+
 from utils.active_config import get_active_data_contract_version
 from data.data_contract import get_data_contract_versions, load_data_contract
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 INCOMING_DIR = PROJECT_ROOT / "data" / "incoming"
@@ -26,57 +16,20 @@ RAW_DIR = PROJECT_ROOT / "data" / "raw"
 
 
 def generate_batch_id() -> str:
-    """
-    Generate a unique batch ID.
-
-    Format:
-        batch_YYYYMMDD_HHMMSS_<random>
-    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"batch_{timestamp}_{uuid4().hex[:6]}"
 
 
 def ingest_incoming_files(
     data_contract_version: int | None = None,
-) -> str | None:
+) -> dict | None:
     """
     Ingest incoming tabular and image files into a single raw batch.
 
-    Files are detected recursively based on extensions defined
-    in the specified data contract version. All detected files
-    are moved into:
-
-        raw/<batch_id>/
-            ├── tabular/
-            └── images/
-
-    Behavior:
-    - Returns None if no files are found.
-    - Raises ValueError if images are present without any tabular file.
-    - Raises ValueError if unknown files are present in incoming.
-    - Returns the created batch_id if ingestion occurs.
-
-    Parameters
-    ----------
-    data_contract_version : int | None
-        Data contract version to use. If None, the active version is resolved.
-
-    Returns
-    -------
-    str | None
-        The created batch ID if files were ingested,
-        otherwise None.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the incoming directory does not exist.
-    ValueError
-        If the contract version is invalid, images are ingested alone,
-        or unknown files are present in incoming.
+    Returns ingestion metrics dictionary or None if nothing to ingest.
     """
 
-    # Resolve contract version
+    start_time = time.time()
 
     if data_contract_version is None:
         data_contract_version = get_active_data_contract_version()
@@ -93,8 +46,7 @@ def ingest_incoming_files(
     if not INCOMING_DIR.exists():
         raise FileNotFoundError("Incoming directory missing.")
 
-    # Detect files recursively
-
+    # Detect files
     tabular_files = [
         file
         for ext in tabular_extensions
@@ -113,13 +65,15 @@ def ingest_incoming_files(
     image_files = sorted(image_files)
 
     # Detect unknown files
-
     recognized_files = set(tabular_files) | set(image_files)
+
+    system_files = {"_READY", "_PROCESSING"}
 
     all_files = {
         file
         for file in INCOMING_DIR.rglob("*")
         if file.is_file()
+        and file.name not in system_files
     }
 
     unknown_files = all_files - recognized_files
@@ -134,10 +88,8 @@ def ingest_incoming_files(
             f"{unknown_list}"
         )
 
-    # Nothing to ingest
-
     if not tabular_files and not image_files:
-        logging.info("No files to ingest.")
+        logger.info("No files to ingest.")
         return None
 
     if image_files and not tabular_files:
@@ -145,7 +97,7 @@ def ingest_incoming_files(
             "Images detected without any tabular file."
         )
 
-    logging.info(
+    logger.info(
         f"Found {len(tabular_files)} tabular file(s) "
         f"and {len(image_files)} image file(s) to ingest."
     )
@@ -161,18 +113,30 @@ def ingest_incoming_files(
     images_dir.mkdir(parents=True, exist_ok=False)
 
     # Move tabular files
-
     for file in tabular_files:
         dest = tabular_dir / file.name
         shutil.move(str(file), str(dest))
-        logging.info(f"{file.name} -> raw/{batch_id}/tabular/")
+        logger.info(f"{file.name} -> raw/{batch_id}/tabular/")
 
     # Move image files
-
     for file in image_files:
         dest = images_dir / file.name
         shutil.move(str(file), str(dest))
-    
-    logging.info(f"all the images founded -> raw/{batch_id}/images/")
 
-    return batch_id
+    logger.info(
+        f"Moved {len(image_files)} image file(s) "
+        f"-> raw/{batch_id}/images/"
+    )
+
+    duration = round(time.time() - start_time, 2)
+
+    logger.info(
+        f"Ingestion for batch {batch_id} completed in {duration}s."
+    )
+
+    return {
+        "batch_id": batch_id,
+        "tabular_files": len(tabular_files),
+        "image_files": len(image_files),
+        "ingestion_duration": duration,
+    }

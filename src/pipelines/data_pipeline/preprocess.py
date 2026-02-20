@@ -11,11 +11,10 @@ For a given raw batch, this module:
 Master writes are performed atomically.
 """
 
-
 from pathlib import Path
-from typing import List
 import pandas as pd
 import logging
+import time
 
 from utils.active_config import get_active_data_contract_version
 from utils.io import atomic_write_parquet, load_tabular_file
@@ -32,6 +31,7 @@ from data.linked_files import (
     attach_canonical_paths
 )
 
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
@@ -44,15 +44,10 @@ def process_linked_images(
     images_dir: Path,
     images_root: Path,
     data_contract_version: int,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, int]:
     """
     Process linked images for a validated batch dataframe.
-
-    Ensures:
-    - No missing referenced files
-    - No unreferenced files in the batch
-    - Technical consistency with the contract
-    - Canonical storage and relative path attachment
+    Returns updated dataframe and number of images processed.
     """
 
     available_files = {p.name for p in images_dir.glob("*")}
@@ -90,8 +85,10 @@ def process_linked_images(
         use_hardlink=True,
     )
 
+    images_processed = sum(len(v) for v in mapping.values())
+
     for name in mapping:
-        logging.info(
+        logger.info(
             f"Canonicalized {len(mapping[name])} linked image(s) "
             f"into {IMAGES_ROOT / name}"
         )
@@ -102,20 +99,20 @@ def process_linked_images(
         data_contract_version=data_contract_version,
     )
 
-    return df
+    return df, images_processed
 
 
 def preprocess_batch(
     batch_id: str,
     data_contract_version: int | None = None,
-) -> None:
+) -> dict:
     """
     Preprocess a raw batch and update the master dataset.
 
-    The batch is validated, linked files are processed,
-    and the resulting dataframe is merged into master.
+    Returns metrics dictionary for monitoring.
     """
 
+    start_time = time.time()
 
     if data_contract_version is None:
         data_contract_version = get_active_data_contract_version()
@@ -124,8 +121,6 @@ def preprocess_batch(
         raise ValueError(
             f"Data contract version {data_contract_version} not found"
         )
-
-    contract = load_data_contract(data_contract_version)
 
     raw_batch_dir = RAW_DIR / batch_id
     tabular_dir = raw_batch_dir / "tabular"
@@ -139,7 +134,7 @@ def preprocess_batch(
     if not tabular_files:
         raise ValueError(f"No tabular files found in {tabular_dir}")
 
-    # Load and validate all tabular files
+    # Load and validate tabular files
     validated_dfs = []
 
     for file in tabular_files:
@@ -152,27 +147,28 @@ def preprocess_batch(
         validated_dfs.append(df)
 
     batch_df = pd.concat(validated_dfs, ignore_index=True)
+    rows_batch = len(batch_df)
 
-    # Process linked images
+    logger.info(f"Batch {batch_id} contains {rows_batch} rows.")
 
-    batch_df = process_linked_images(
+    # Process images
+    batch_df, images_processed = process_linked_images(
         df=batch_df,
         images_dir=images_dir,
         images_root=IMAGES_ROOT,
         data_contract_version=data_contract_version,
     )
 
-    # Merge into master dataset
+    logger.info(
+        f"Batch {batch_id} processed {images_processed} image(s)."
+    )
 
+    # Merge into master
     PROCESSED_ROOT.mkdir(parents=True, exist_ok=True)
     master_path = PROCESSED_ROOT / "master.parquet"
 
     if master_path.exists():
         master_df = pd.read_parquet(master_path)
-    else:
-        master_df = None
-
-    if master_df is not None:
         n_rows_before = len(master_df)
 
         master_df = merge_into_master(
@@ -182,18 +178,32 @@ def preprocess_batch(
         )
 
         n_rows_after = len(master_df)
-        added = n_rows_after - n_rows_before
+        rows_added = n_rows_after - n_rows_before
 
-        logging.info(
-            f"Merged {added} rows out of {len(batch_df)} "
-            f"(master {n_rows_before} → {n_rows_after})"
+        logger.info(
+            f"Merged {rows_added} rows "
+            f"(master {n_rows_before} → {n_rows_after})."
         )
     else:
         master_df = batch_df.copy()
-        logging.info(
-            f"Initialized master dataset with {len(master_df)} rows."
+        rows_added = rows_batch
+        logger.info(
+            f"Initialized master dataset with {rows_added} rows."
         )
 
     atomic_write_parquet(master_df, master_path, index=False)
 
-    logging.info(f"Master dataset updated at {master_path}")
+    duration = round(time.time() - start_time, 2)
+
+    logger.info(
+        f"Master dataset updated at {master_path} "
+        f"in {duration}s."
+    )
+
+    return {
+        "batch_id": batch_id,
+        "rows_batch": rows_batch,
+        "rows_added": rows_added,
+        "images_processed": images_processed,
+        "preprocess_duration": duration,
+    }

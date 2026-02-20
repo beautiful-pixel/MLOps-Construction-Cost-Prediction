@@ -57,11 +57,19 @@ def _dvc_add(path: Path) -> None:
 
 # Public dataset versioning functions
 
-def dvc_add_raw() -> None:
+def dvc_add_raw(batch_id: str) -> None:
     """
-    Snapshot raw data directory.
+    Snapshot a specific raw batch directory.
     """
-    _dvc_add(RAW_ROOT)
+
+    batch_path = RAW_ROOT / batch_id
+
+    if not batch_path.exists():
+        raise ValueError(f"Raw batch does not exist: {batch_path}")
+
+    logging.info(f"Versioning raw batch: {batch_id}")
+
+    _dvc_add(batch_path)
 
 
 def dvc_add_master() -> None:

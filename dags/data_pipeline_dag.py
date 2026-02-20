@@ -2,126 +2,169 @@
 Data Pipeline DAG.
 
 Flow:
-1. Ingest CSV files from data/incoming/
-2. Create raw batch folders
-3. Preprocess batches
-4. Update cumulative master dataset
-
-This DAG is event-triggered or manual (schedule=None).
+1. Check _READY
+2. Ingest files
+3. Preprocess batch
+4. Update master
+5. Notify success
+6. Clean incoming
 """
 
 from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
 from datetime import timedelta
+from pathlib import Path
 
+from pipelines.data_pipeline.check_incoming import check_and_lock_ready
 from pipelines.data_pipeline.ingestion import ingest_incoming_files
 from pipelines.data_pipeline.preprocess import preprocess_batch
 from pipelines.data_pipeline.clean_incoming import clean_incoming
-from utils.data_versioning import dvc_add_raw, dvc_add_master, dvc_add_images
+from utils.data_versioning import dvc_add_raw, dvc_add_master
 
-from airflow.decorators import task
+from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
+
+def send_success_notification(metrics: dict) -> None:
+    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
+
+    message = f"""
+*Data batch processed successfully*
+
+*Batch ID:* {metrics['batch_id']}
+
+*Tabular files:* {metrics['tabular_files']}
+*Images moved (ingestion):* {metrics['image_files']}
+
+*Rows in batch:* {metrics['rows_batch']}
+*Rows added to master:* {metrics['rows_added']}
+*Images processed:* {metrics['images_processed']}
+
+*Ingestion duration:* {metrics['ingestion_duration']}s
+*Preprocess duration:* {metrics['preprocess_duration']}s
+    """
+
+    hook.send(text=message)
+
+
+
+def slack_alert(context):
+    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
+
+    exception = context.get("exception")
+    task_id = context["task_instance"].task_id
+    dag_id = context["dag"].dag_id
+
+    hook.send(
+        text=f"""
+*Pipeline Failure*
+
+*DAG:* {dag_id}
+*Task:* {task_id}
+
+*Error:*
+{exception}
+"""
+    )
 
 
 DEFAULT_ARGS = {
     "owner": "mlops",
     "retries": 1,
     "retry_delay": timedelta(minutes=1),
+    "on_failure_callback": slack_alert,
 }
-
 
 @dag(
     dag_id="data_pipeline_dag",
     default_args=DEFAULT_ARGS,
     description="Ingestion + preprocessing pipeline",
     start_date=days_ago(1),
-    schedule=None,   # event-driven or manual
+    schedule="*/5 * * * *",
     catchup=False,
+    max_active_runs=1,
     tags=["data", "pipeline"],
 )
 
 def data_pipeline():
 
     @task
-    def ingestion() -> str | None:
-        """
-        Ingest incoming files and return created batch ID.
-        """
+    def check_ready_task():
+        check_and_lock_ready()
+
+    @task
+    def ingestion_task() -> dict | None:
         return ingest_incoming_files()
 
     @task
-    def version_raw(batch_id: str | None) -> str | None:
-        """
-        Snapshot raw dataset with DVC.
-        """
-        if batch_id:
-            dvc_add_raw()
-        return batch_id
+    def version_raw_task(ingestion_metrics: dict | None) -> dict | None:
+        if ingestion_metrics is None:
+            return None
+
+        batch_id = ingestion_metrics["batch_id"]
+        dvc_add_raw(batch_id)
+        return ingestion_metrics
 
     @task
-    def preprocess(batch_id: str | None) -> bool:
-        """
-        Preprocess each batch and update master dataset.
-        """
-        if batch_id is None:
-            return False
+    def preprocess_task(ingestion_metrics: dict | None) -> dict | None:
+        if ingestion_metrics is None:
+            return None
 
-        preprocess_batch(batch_id)
+        batch_id = ingestion_metrics["batch_id"]
 
-        return True
+        preprocess_metrics = preprocess_batch(batch_id)
 
-    @task
-    def version_master(preprocess_success: bool) -> bool:
-        """
-        Snapshot master dataset if it was updated.
-        """
-        if preprocess_success:
-            dvc_add_master()
-            return True
-
-        return False
+        # Merge ingestion + preprocess metrics
+        return {
+            **ingestion_metrics,
+            **preprocess_metrics,
+        }
 
     @task
-    def version_images(preprocess_success: bool) -> bool:
-        """
-        Snapshot images if preprocess was successful.
-        """
-        if preprocess_success:
-            dvc_add_images()
-            return True
+    def version_master_task(metrics: dict | None) -> dict | None:
+        if metrics is None:
+            return None
 
-        return False
+        dvc_add_master()
+        return metrics
 
     @task
-    def validate_and_clean_incoming(preprocess_success: bool) -> None:
-        """
-        Remove empty incoming folders if preprocessing was successful.
-        """
-        if not preprocess_success:
-            return
+    def validate_and_clean_incoming_task(metrics: dict | None):
+        if metrics is None:
+            return None
 
         clean_incoming()
 
-        
+        processing_file = (
+            Path(__file__).resolve().parents[3]
+            / "data"
+            / "incoming"
+            / "_PROCESSING"
+        )
+
+        if processing_file.exists():
+            processing_file.unlink()
+
+        return metrics
 
 
-    batch_id = ingestion()
-    batch_id = version_raw(batch_id)
+    @task
+    def notify_success_task(metrics: dict | None):
+        if metrics is None:
+            return None
 
-    preprocess_success = preprocess(batch_id)
+        send_success_notification(metrics)
 
-    master_versionning = version_master(preprocess_success)
-    # images_versionning = version_images(preprocess_success)
+    # Task chain
+    check = check_ready_task()
 
-    validate_and_clean_incoming(preprocess_success)
+    ingested = ingestion_task()
+    versioned_raw = version_raw_task(ingested)
+    processed = preprocess_task(versioned_raw)
+    versioned_master = version_master_task(processed)
+    cleaned = validate_and_clean_incoming_task(versioned_master)
+    notified = notify_success_task(cleaned)
 
-    # master_versionning >> images_versionning
-
-
-data_pipeline()
-
-
-
-
+    check >> ingested >> versioned_raw >> processed >> versioned_master >> cleaned >> notified
 
 
+dag = data_pipeline()
