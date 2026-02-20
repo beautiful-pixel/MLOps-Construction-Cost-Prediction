@@ -18,6 +18,7 @@ def mock_contract(monkeypatch):
                 "type": "float",
                 "min": 0.0,
                 "max": 10.0,
+                "non_nullable": True,
             },
             "category": {
                 "type": "string",
@@ -25,6 +26,7 @@ def mock_contract(monkeypatch):
             },
         },
         "primary_key": ["id"],
+        "target": "value",
     }
 
     monkeypatch.setattr(

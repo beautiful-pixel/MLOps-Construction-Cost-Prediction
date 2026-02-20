@@ -6,7 +6,7 @@ used by the split dispatcher.
 """
 
 from pathlib import Path
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 import pandas as pd
 
 

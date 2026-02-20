@@ -32,9 +32,10 @@ Each configuration type is versioned independently.
 active_config.yaml defines which versions are currently used by the pipeline.
 
     data_contract_version: 1
-    default_feature_version: 1
-    default_split_version: 1
-    default_model_version: 1
+    training_defaults:
+      feature_version: 1
+      split_version: 1
+      model_version: 1
 
 Changing this file switches strategy versions without touching code.
 
@@ -94,7 +95,6 @@ Data contracts act as a formal agreement between data producers and the ML pipel
 
 Feature configs define:
 
-- Target variable
 - Feature list
 - Feature types
 - Preprocessing strategy
@@ -103,9 +103,8 @@ Example structure:
 
     version: 1
     data_contract: 1
-    target: target_column
 
-    features:
+    tabular_features:
       feature_name:
         type: numeric | categorical
         impute: median | mean | most_frequent
@@ -117,8 +116,7 @@ Required fields:
 
 - version
 - data_contract
-- target
-- features
+- tabular_features
 - type (for each feature)
 
 Numeric features may include:
@@ -135,6 +133,9 @@ Categorical features may include:
 The structure is evolutive.
 New preprocessing blocks (e.g., scaling, log transform) can be added
 by extending the preprocessing module in src/.
+
+Note: image_features can be declared in schemas but are not yet supported
+by the current training/inference pipelines.
 
 ---
 

@@ -13,6 +13,11 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 INCOMING_DIR = PROJECT_ROOT / "data" / "incoming"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
+IGNORED_FILENAMES = {".DS_Store", "Thumbs.db"}
+
+
+def _is_ignored(path: Path) -> bool:
+    return path.name in IGNORED_FILENAMES or path.name.startswith(".")
 
 
 def generate_batch_id() -> str:
@@ -51,14 +56,14 @@ def ingest_incoming_files(
         file
         for ext in tabular_extensions
         for file in INCOMING_DIR.rglob(f"*.{ext}")
-        if file.is_file()
+        if file.is_file() and not _is_ignored(file)
     ]
 
     image_files = [
         file
         for ext in image_extensions
         for file in INCOMING_DIR.rglob(f"*.{ext}")
-        if file.is_file()
+        if file.is_file() and not _is_ignored(file)
     ]
 
     tabular_files = sorted(tabular_files)
@@ -115,12 +120,20 @@ def ingest_incoming_files(
     # Move tabular files
     for file in tabular_files:
         dest = tabular_dir / file.name
+        if dest.exists():
+            raise ValueError(
+                f"Duplicate tabular filename detected: {file.name}"
+            )
         shutil.move(str(file), str(dest))
         logger.info(f"{file.name} -> raw/{batch_id}/tabular/")
 
     # Move image files
     for file in image_files:
         dest = images_dir / file.name
+        if dest.exists():
+            raise ValueError(
+                f"Duplicate image filename detected: {file.name}"
+            )
         shutil.move(str(file), str(dest))
 
     logger.info(

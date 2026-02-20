@@ -65,6 +65,15 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     return {"username": username, "role": role}
 
 
+def require_user(user=Depends(get_current_user)):
+    if user.get("role") not in {"user", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail="User privileges required",
+        )
+    return user
+
+
 def require_admin(user=Depends(get_current_user)):
     if user["role"] != "admin":
         raise HTTPException(

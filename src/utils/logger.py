@@ -32,14 +32,24 @@ def setup_logging(
 
     root_logger = logging.getLogger()
 
-    # If logging already configured (Airflow, pytest, etc.) avoid logging conflict
-    if root_logger.handlers:
-        return
-    
     formatter = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    # If logging already configured (Airflow, pytest, etc.), avoid duplicate console,
+    # but ensure a file handler exists for this run.
+    if root_logger.handlers:
+        existing_files = {
+            getattr(handler, "baseFilename", None)
+            for handler in root_logger.handlers
+        }
+        if str(log_file.resolve()) not in existing_files:
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setLevel(level)
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+        return log_file
 
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(level)

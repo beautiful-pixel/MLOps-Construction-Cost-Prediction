@@ -25,7 +25,7 @@ from utils.active_config import (
 )
 
 FEATURE_DIR = Path("/app/configs/features")
-MODEL_DIR = Path("/app/configs/model_schemas")
+MODEL_DIR = Path("/app/configs/models")
 
 
 # Feature Schema Service
@@ -65,6 +65,7 @@ class FeatureSchemaConfigService:
 
         validate_feature_schema_definition(full_schema)
 
+        FEATURE_DIR.mkdir(parents=True, exist_ok=True)
         file_path = FEATURE_DIR / f"v{new_version}.yaml"
 
         with open(file_path, "w") as f:
@@ -124,8 +125,9 @@ class ModelSchemaConfigService:
             },
         }
 
-        validate_model_schema_definition(full_schema)
+        validate_model_schema(full_schema)
 
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
         file_path = MODEL_DIR / f"v{new_version}.yaml"
 
         with open(file_path, "w") as f:

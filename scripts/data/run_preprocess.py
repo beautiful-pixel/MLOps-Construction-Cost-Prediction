@@ -22,6 +22,7 @@ def main():
     )
     parser.add_argument(
         "--version",
+        type=int,
         default=None,
         help="Data contract version to use (e.g. 1). If not specified, active version is used.",
     )

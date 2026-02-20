@@ -46,4 +46,4 @@ tabular_features:
   seismic_hazard_zone:
     type: categorical
     encoding: ordinal
-    order: [Low, Moderate, High]
+    order: [Very Low, Low, Moderate, High, Very High]
