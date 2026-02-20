@@ -25,6 +25,7 @@ htmlcov/
 
 # Environments
 .env
+deployments/.env
 .venv
 env/
 venv/

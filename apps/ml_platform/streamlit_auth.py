@@ -10,6 +10,10 @@ GATEWAY_API_URL_ENV = "GATEWAY_API_URL"
 GATEWAY_API_TOKEN_ENV = "GATEWAY_API_TOKEN"
 AUTH_COOKIE_NAME = "ml_platform_auth"
 AUTH_COOKIE_MAX_AGE = 60 * 60 * 8
+GITHUB_ACTIONS_TOKEN_ENV = "GITHUB_ACTIONS_TOKEN"
+GITHUB_REPO_ENV = "GITHUB_REPO"
+GITHUB_WORKFLOW_ENV = "GITHUB_WORKFLOW"
+GITHUB_REF_ENV = "GITHUB_REF"
 
 
 def get_gateway_api_url() -> str:
@@ -133,6 +137,53 @@ def _login(username: str, password: str) -> tuple[str | None, str | None]:
     return token, None
 
 
+def _dispatch_workflow() -> tuple[bool, str]:
+    token = os.getenv(GITHUB_ACTIONS_TOKEN_ENV)
+    repo = os.getenv(GITHUB_REPO_ENV)
+    workflow = os.getenv(GITHUB_WORKFLOW_ENV)
+    ref = os.getenv(GITHUB_REF_ENV) or "dev"
+
+    missing = [
+        name
+        for name, value in (
+            (GITHUB_ACTIONS_TOKEN_ENV, token),
+            (GITHUB_REPO_ENV, repo),
+            (GITHUB_WORKFLOW_ENV, workflow),
+        )
+        if not value
+    ]
+    if missing:
+        return False, f"Missing env vars: {', '.join(missing)}"
+
+    url = (
+        f"https://api.github.com/repos/{repo}/actions/"
+        f"workflows/{workflow}/dispatches"
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    try:
+        response = requests.post(
+            url,
+            headers=headers,
+            json={"ref": ref},
+            timeout=10,
+        )
+    except Exception as exc:
+        return False, f"GitHub unreachable: {exc}"
+
+    if response.status_code == 204:
+        return True, f"Workflow dispatch requested on {ref}."
+
+    return (
+        False,
+        f"Dispatch failed ({response.status_code}): {response.text}",
+    )
+
+
 def login_sidebar() -> None:
     _init_state()
 
@@ -184,6 +235,35 @@ def login_sidebar() -> None:
 
         with st.expander("Test credentials"):
             st.code("admin / admin\nuser / user")
+
+        token = os.getenv(GITHUB_ACTIONS_TOKEN_ENV)
+        repo = os.getenv(GITHUB_REPO_ENV)
+        workflow = os.getenv(GITHUB_WORKFLOW_ENV)
+        ref = os.getenv(GITHUB_REF_ENV) or "dev"
+        missing = [
+            name
+            for name, value in (
+                (GITHUB_ACTIONS_TOKEN_ENV, token),
+                (GITHUB_REPO_ENV, repo),
+                (GITHUB_WORKFLOW_ENV, workflow),
+            )
+            if not value
+        ]
+        help_text = (
+            f"Missing env vars: {', '.join(missing)}"
+            if missing
+            else f"Dispatches {workflow} on {repo} ({ref})."
+        )
+        if st.button(
+            "Test workflow",
+            disabled=bool(missing),
+            help=help_text,
+        ):
+            ok, message = _dispatch_workflow()
+            if ok:
+                st.success(message)
+            else:
+                st.error(message)
 
 
 def require_auth() -> None:
