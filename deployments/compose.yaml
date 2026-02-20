@@ -175,8 +175,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
       - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
-    depends_on:
-      - gateway-api
+    restart: always
 
   # ---------- Nginx Prometheus Exporter ----------
   nginx-exporter:
@@ -185,8 +184,7 @@ services:
       - -nginx.scrape-uri=http://nginx/nginx_status
     expose:
       - 9113
-    depends_on:
-      - nginx
+    restart: always
 
 
 

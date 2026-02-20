@@ -42,7 +42,7 @@ start:
 start-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --build postgres
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) run --rm airflow-init
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d mlflow airflow-webserver airflow-scheduler
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d
 
 stop:
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) down
@@ -68,7 +68,7 @@ build:
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) build --no-cache
 
 build-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache mlflow airflow-webserver airflow-scheduler
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache
 
 rebuild:
 	$(MAKE) stop

@@ -10,13 +10,9 @@ WORKDIR /app
 COPY pyproject.toml .
 COPY README.md .
 COPY src/ src/
-RUN pip install --no-cache-dir -e .
-
-COPY api/inference_api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir ".[inference]"
 
 COPY api/inference_api/main.py .
-
 COPY configs/ configs/
 
 EXPOSE 8000

@@ -6,14 +6,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY api/gateway_api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
 COPY pyproject.toml .
 COPY README.md .
 COPY src/ src/
 
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir ".[gateway]"
 
 COPY api/gateway_api/ .
 
