@@ -1,21 +1,16 @@
 # Admin - Feature Schema Management
 
-import os
 import requests
 import streamlit as st
+from streamlit_auth import (
+    assert_response_ok,
+    auth_headers,
+    get_gateway_api_url,
+    require_auth,
+)
 
-GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
-GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
-
-if not GATEWAY_API_URL:
-    st.error("GATEWAY_API_URL is not set.")
-    st.stop()
-
-
-def auth_headers():
-    if not GATEWAY_API_TOKEN:
-        return {}
-    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
+GATEWAY_API_URL = get_gateway_api_url()
+require_auth()
 
 st.title("Feature Schema Admin")
 
@@ -27,6 +22,7 @@ try:
         f"{GATEWAY_API_URL}/configs/feature-schemas",
         headers=auth_headers(),
     )
+    assert_response_ok(r, admin_only=True)
     feature_meta = r.json()
     active_contract_version = feature_meta.get("data_contract")
     available_feature_versions = feature_meta.get("available_feature_versions", [])
@@ -53,6 +49,7 @@ try:
         f"{GATEWAY_API_URL}/configs/feature-schemas/{selected_feature_version}",
         headers=auth_headers(),
     )
+    assert_response_ok(r, admin_only=True)
     selected_schema = r.json()
     schema_contract_version = selected_schema["data_contract"]
     schema_features = selected_schema.get("tabular_features", {})
@@ -91,6 +88,7 @@ try:
         f"{GATEWAY_API_URL}/configs/data-contract/{schema_contract_version}",
         headers=auth_headers(),
     )
+    assert_response_ok(r, admin_only=True)
     contract = r.json()
     columns = contract["columns"]
 except Exception:
@@ -219,4 +217,6 @@ if st.button("Create New Feature Version"):
         st.session_state.edit_mode = False
         st.rerun()
     else:
+        if r.status_code in (401, 403):
+            assert_response_ok(r, admin_only=True)
         st.error(r.text)

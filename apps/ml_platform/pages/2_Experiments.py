@@ -1,30 +1,40 @@
 # Experiments dashboard
 
-import os
 import requests
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from streamlit_auth import (
+    assert_response_ok,
+    auth_headers,
+    get_gateway_api_url,
+    require_auth,
+)
 
-GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
-GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
-
-if not GATEWAY_API_URL:
-    st.error("GATEWAY_API_URL is not set.")
-    st.stop()
-
-
-def auth_headers():
-    if not GATEWAY_API_TOKEN:
-        return {}
-    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
+GATEWAY_API_URL = get_gateway_api_url()
+require_auth()
 
 
 st.title("ML Experiments")
 
-# Fetch current production model
-prod_model = None
+# Fetch experiments (admin only)
+try:
+    exp_response = requests.get(
+        f"{GATEWAY_API_URL}/experiments/",
+        headers=auth_headers(),
+    )
+    assert_response_ok(exp_response, admin_only=True)
+    experiments = exp_response.json()
+except Exception as e:
+    st.error(f"Cannot reach gateway: {e}")
+    st.stop()
 
+if not experiments:
+    st.warning("No experiments found")
+    st.stop()
+
+# Fetch current production model (user + admin)
+prod_model = None
 try:
     prod_response = requests.get(
         f"{GATEWAY_API_URL}/models/current",
@@ -32,6 +42,8 @@ try:
     )
     if prod_response.status_code == 200:
         prod_model = prod_response.json()
+    elif prod_response.status_code in (401, 403):
+        assert_response_ok(prod_response)
 except Exception:
     st.warning("Could not fetch production model")
 
@@ -47,21 +59,6 @@ else:
     st.info("No production model found")
 
 st.divider()
-
-# Fetch experiments
-try:
-    exp_response = requests.get(
-        f"{GATEWAY_API_URL}/experiments/",
-        headers=auth_headers(),
-    )
-    experiments = exp_response.json()
-except Exception as e:
-    st.error(f"Cannot reach gateway: {e}")
-    st.stop()
-
-if not experiments:
-    st.warning("No experiments found")
-    st.stop()
 
 experiment_map = {
     e["name"]: e["experiment_id"] for e in experiments
@@ -79,6 +76,7 @@ runs_response = requests.get(
     f"{GATEWAY_API_URL}/experiments/{experiment_id}/runs",
     headers=auth_headers(),
 )
+assert_response_ok(runs_response, admin_only=True)
 
 runs = runs_response.json()
 
@@ -144,7 +142,9 @@ if st.button("Promote to Production"):
         st.success("Model promoted successfully")
         st.rerun()
     else:
-        st.error("Promotion failed")
+        if response.status_code in (401, 403):
+            assert_response_ok(response, admin_only=True)
+        st.error(response.text or "Promotion failed")
 
 # Refresh
 if st.button("Refresh"):

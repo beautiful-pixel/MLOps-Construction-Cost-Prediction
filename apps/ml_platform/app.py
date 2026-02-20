@@ -1,6 +1,11 @@
-import os
 import requests
 import streamlit as st
+from streamlit_auth import (
+    auth_headers,
+    get_auth_token,
+    get_gateway_api_url,
+    login_sidebar,
+)
 
 
 # Page configuration
@@ -13,10 +18,9 @@ st.set_page_config(
 
 # Configuration
 
-INFERENCE_API_URL = os.getenv("INFERENCE_API_URL")
-if not INFERENCE_API_URL:
-    st.error("INFERENCE_API_URL is not set.")
-    st.stop()
+GATEWAY_API_URL = get_gateway_api_url()
+
+login_sidebar()
 
 
 # Title
@@ -39,26 +43,47 @@ st.subheader("Platform Status")
 col1, col2 = st.columns(2)
 
 with col1:
-
     try:
         response = requests.get(
-            f"{INFERENCE_API_URL}/health",
+            f"{GATEWAY_API_URL}/health",
             timeout=3
         )
-
         if response.status_code == 200:
-            health = response.json()
-
-            st.success("Inference API operational")
-
-            st.write("Model version:", health.get("model_version"))
-            st.write("Feature version:", health.get("feature_version"))
-
+            st.success("Gateway API reachable")
         else:
-            st.warning("Inference API reachable but unhealthy")
-
+            st.warning("Gateway API reachable but unhealthy")
     except Exception:
-        st.error("Inference API not reachable")
+        st.error("Gateway API not reachable")
+
+    if get_auth_token():
+        try:
+            info_response = requests.get(
+                f"{GATEWAY_API_URL}/info",
+                headers=auth_headers(),
+                timeout=3
+            )
+            if info_response.status_code == 200:
+                info = info_response.json()
+                st.success("Authenticated access OK")
+                st.write("Model version:", info.get("model_version"))
+                st.write("Feature version:", info.get("feature_version"))
+                st.write("Split version:", info.get("split_version"))
+                if info.get("model_last_updated_at"):
+                    st.write("Last updated:", info.get("model_last_updated_at"))
+                if info.get("metrics"):
+                    st.json(info.get("metrics"))
+                if info.get("data_version") is not None:
+                    st.write("Data version:", info.get("data_version"))
+            elif info_response.status_code in (401, 403):
+                st.error("Authentication required. Please login.")
+            elif info_response.status_code == 404:
+                st.warning("No production model found.")
+            else:
+                st.warning("Gateway API reachable but unhealthy")
+        except Exception:
+            st.error("Gateway API not reachable")
+    else:
+        st.info("Login to view protected system info.")
 
 
 with col2:

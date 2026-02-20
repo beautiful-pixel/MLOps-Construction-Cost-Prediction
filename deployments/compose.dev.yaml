@@ -18,3 +18,7 @@ services:
   grafana:
     ports:
       - "${GRAFANA_PORT}:3000"
+
+  prometheus:
+    ports:
+      - "${PROMETHEUS_PORT}:9090"

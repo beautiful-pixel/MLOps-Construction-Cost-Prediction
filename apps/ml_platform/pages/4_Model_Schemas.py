@@ -1,21 +1,16 @@
 # Admin - Model Schema Management
 
-import os
 import requests
 import streamlit as st
+from streamlit_auth import (
+    assert_response_ok,
+    auth_headers,
+    get_gateway_api_url,
+    require_auth,
+)
 
-GATEWAY_API_URL = os.getenv("GATEWAY_API_URL")
-GATEWAY_API_TOKEN = os.getenv("GATEWAY_API_TOKEN")
-
-if not GATEWAY_API_URL:
-    st.error("GATEWAY_API_URL is not set.")
-    st.stop()
-
-
-def auth_headers():
-    if not GATEWAY_API_TOKEN:
-        return {}
-    return {"Authorization": f"Bearer {GATEWAY_API_TOKEN}"}
+GATEWAY_API_URL = get_gateway_api_url()
+require_auth()
 
 st.title("Model Schema Admin")
 
@@ -27,6 +22,7 @@ try:
         f"{GATEWAY_API_URL}/configs/model-schemas",
         headers=auth_headers(),
     )
+    assert_response_ok(r, admin_only=True)
     model_meta = r.json()
     available_model_versions = model_meta.get("available_model_versions", [])
     default_model_version = model_meta.get("default_model_version")
@@ -42,6 +38,7 @@ try:
         f"{GATEWAY_API_URL}/configs/model-schemas/supported",
         headers=auth_headers(),
     )
+    assert_response_ok(r, admin_only=True)
     supported_models = r.json()
 except Exception:
     st.error("Unable to load supported model definitions")
@@ -71,6 +68,7 @@ try:
         f"{GATEWAY_API_URL}/configs/model-schemas/{selected_model_version}",
         headers=auth_headers(),
     )
+    assert_response_ok(r, admin_only=True)
     selected_schema = r.json()
     schema_model_type = selected_schema["model"]["type"]
     schema_params = selected_schema["model"]["params"]
@@ -208,6 +206,8 @@ if st.button("Create New Model Version"):
         st.session_state.model_builder_type = None
         st.rerun()
     else:
+        if r.status_code in (401, 403):
+            assert_response_ok(r, admin_only=True)
         st.error(r.text)
 
 
@@ -227,4 +227,6 @@ if st.button("Set Selected Version as Default"):
         st.success("Default model version updated")
         st.rerun()
     else:
+        if r.status_code in (401, 403):
+            assert_response_ok(r, admin_only=True)
         st.error(r.text)
