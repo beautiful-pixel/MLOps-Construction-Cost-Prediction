@@ -15,6 +15,7 @@ This module:
 
 from pathlib import Path
 import logging
+import time
 import pandas as pd
 import mlflow
 import mlflow.sklearn
@@ -37,6 +38,11 @@ from models.model_schema import (
 from training.metrics import compute_metrics
 
 
+# Logger
+
+logger = logging.getLogger(__name__)
+
+
 # Paths
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -48,21 +54,21 @@ def train_model(
     split_version: int,
     feature_version: int,
     model_version: int,
-) -> None:
+) -> dict:
     """
     Train model using persisted split and log results
     to an existing MLflow run.
-
-    Args:
-        run_id (str):
-            Active MLflow run ID.
-        split_version (int):
-            Validated split version.
-        feature_version (int):
-            Validated feature schema version.
-        model_version (int):
-            Validated model schema version.
     """
+
+    start_time = time.time()
+
+    logger.info(
+        "Starting training | "
+        f"run_id={run_id}, "
+        f"split_version={split_version}, "
+        f"feature_version={feature_version}, "
+        f"model_version={model_version}"
+    )
 
     # Validate versions
 
@@ -75,7 +81,6 @@ def train_model(
     if model_version not in get_allowed_model_versions():
         raise ValueError(f"Invalid model_version: {model_version}")
 
-
     # Load schemas
 
     feature_schema = load_feature_schema(feature_version)
@@ -87,7 +92,6 @@ def train_model(
             "supported by the current training pipeline."
         )
 
-
     # Load persisted train split
 
     train_path = SPLITS_ROOT / f"v{split_version}" / "train.parquet"
@@ -95,52 +99,57 @@ def train_model(
     if not train_path.exists():
         raise ValueError(f"Train split not found at {train_path}")
 
-    logging.info(f"Loading train split from {train_path}")
+    logger.info(f"Loading train split from {train_path}")
     train_df = pd.read_parquet(train_path)
 
-    # Validate dataset
+    n_rows = len(train_df)
+    logger.info(f"Training dataset loaded ({n_rows} rows)")
 
-    validate_dataframe(train_df, feature_version)
-    X, y = extract_features_and_target(train_df, feature_version)
+# Validate dataset
 
+validate_dataframe(train_df, feature_version)
+X, y = extract_features_and_target(train_df, feature_version)
 
-    # Build pipeline
+# Build pipeline
+logger.info("Building model")
 
-    preprocessor = build_tabular_model_preprocessor(feature_schema)
-    model = build_model(model_version)
+preprocessor = build_tabular_model_preprocessor(feature_schema)
+model = build_model(model_version)
 
-    pipeline = Pipeline(
-        steps=[
-            ("preprocessor", preprocessor),
-            ("model", model),
-        ]
-    )
+pipeline = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        ("model", model),
+    ]
+)
 
+logger.info("Fitting training pipeline")
+pipeline.fit(X, y)
 
-    # Attach to existing MLflow run
-    mlflow.start_run(run_id=run_id)
+logger.info("Train prediction")
+predictions = pipeline.predict(X)
 
-    try:
+metrics = compute_metrics(y, predictions)
+metrics = {f"train_{k}": v for k, v in metrics.items()}
 
-        mlflow.log_param("model_type", model_schema["model"]["type"])
-        mlflow.log_params(model_schema["model"].get("params", {}))
+params = {
+    "model_type": model_schema["model"]["type"],
+    **model_schema["model"].get("params", {}),
+}
 
-        # Train
+duration = round(time.time() - start_time, 2)
+metrics['training_duration'] = duration
 
-        logging.info("Fitting training pipeline")
-        pipeline.fit(X, y)
+logger.info(f"Training completed in {duration}s")
 
-        predictions = pipeline.predict(X)
-        train_metrics = compute_metrics(y, predictions)
-        train_metrics = {f"train_{k}": v for k, v in train_metrics.items()}
+mlflow.start_run(run_id=run_id)
 
-        mlflow.log_metrics(train_metrics)
+try:
+    mlflow.log_params(params)
+    mlflow.log_metrics(metrics)
+    mlflow.sklearn.log_model(pipeline, artifact_path="model")
 
-        # Log model artifact
+finally:
+    mlflow.end_run()
 
-        mlflow.sklearn.log_model(pipeline, artifact_path="model")
-
-    finally:
-        mlflow.end_run()
-
-    logging.info("Training completed successfully")
+return metrics

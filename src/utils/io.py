@@ -2,6 +2,10 @@ from pathlib import Path
 import pandas as pd
 import os
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROCESSED_ROOT = PROJECT_ROOT / "data" / "processed"
+MASTER_PATH = PROCESSED_ROOT / "master.parquet"
+
 
 def load_tabular_file(path: Path) -> pd.DataFrame:
     """
@@ -32,3 +36,25 @@ def atomic_write_parquet(df, path: Path, **kwargs) -> None:
     df.to_parquet(tmp_path, **kwargs)
 
     tmp_path.replace(path)
+
+
+def load_master_dataframe() -> pd.DataFrame:
+    """
+    Load the current master dataset.
+
+    """
+
+    if not MASTER_PATH.exists():
+        raise FileNotFoundError(
+            f"Master dataset not found at {MASTER_PATH}"
+        )
+
+    df = pd.read_parquet(MASTER_PATH)
+
+    if df.empty:
+        raise ValueError("Master dataset is empty.")
+
+
+    return df
+
+

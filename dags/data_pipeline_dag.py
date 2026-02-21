@@ -87,51 +87,38 @@ DEFAULT_ARGS = {
 
 def data_pipeline():
 
-    @task
+    @task.short_circuit
     def check_ready_task():
-        check_and_lock_ready()
+        ready = check_and_lock_ready()
+        return ready
 
     @task
-    def ingestion_task() -> dict | None:
+    def ingestion_task() -> dict:
         return ingest_incoming_files()
 
     @task
-    def version_raw_task(ingestion_metrics: dict | None) -> dict | None:
-        if ingestion_metrics is None:
-            return None
-
+    def version_raw_task(ingestion_metrics: dict) -> dict:
         batch_id = ingestion_metrics["batch_id"]
         dvc_add_raw(batch_id)
         return ingestion_metrics
 
     @task
-    def preprocess_task(ingestion_metrics: dict | None) -> dict | None:
-        if ingestion_metrics is None:
-            return None
-
+    def preprocess_task(ingestion_metrics: dict) -> dict:
         batch_id = ingestion_metrics["batch_id"]
-
         preprocess_metrics = preprocess_batch(batch_id)
-
-        # Merge ingestion + preprocess metrics
         return {
             **ingestion_metrics,
             **preprocess_metrics,
         }
 
     @task
-    def version_master_task(metrics: dict | None) -> dict | None:
-        if metrics is None:
-            return None
-
+    def version_master_task(metrics: dict) -> dict:
         dvc_add_master()
         return metrics
 
     @task
-    def validate_and_clean_incoming_task(metrics: dict | None):
-        if metrics is None:
-            return None
-
+    def validate_and_clean_incoming_task(metrics: dict):
+        
         clean_incoming()
 
         processing_file = (
@@ -148,11 +135,16 @@ def data_pipeline():
 
 
     @task
-    def notify_success_task(metrics: dict | None):
-        if metrics is None:
-            return None
+    def notify_success_task(metrics: dict):
 
         send_success_notification(metrics)
+
+
+    trigger_retrain = TriggerDagRunOperator(
+        task_id="trigger_retrain_policy",
+        trigger_dag_id="retrain_policy_dag",
+        wait_for_completion=False,
+    )
 
     # Task chain
     check = check_ready_task()
@@ -164,7 +156,7 @@ def data_pipeline():
     cleaned = validate_and_clean_incoming_task(versioned_master)
     notified = notify_success_task(cleaned)
 
-    check >> ingested >> versioned_raw >> processed >> versioned_master >> cleaned >> notified
+    check >> ingested >> versioned_raw >> processed >> versioned_master >> cleaned >> notified >> trigger_retrain
 
 
 dag = data_pipeline()

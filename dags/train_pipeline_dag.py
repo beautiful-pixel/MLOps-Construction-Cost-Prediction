@@ -1,10 +1,24 @@
+"""
+Training pipeline DAG.
+
+Flow:
+1. Resolve configuration
+2. Start MLflow run
+3. Split dataset
+4. Version splits
+5. Train model
+6. Evaluate model
+7. Promote if better
+8. Notify success
+"""
+
 import logging
 import mlflow
+import pendulum
 
 from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
-
-import pendulum
+from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 
 from pipelines.train_pipeline.split import run_split_pipeline
 from pipelines.train_pipeline.train import train_model
@@ -30,16 +44,78 @@ from utils.data_versioning import (
 from utils.mlflow_config import configure_mlflow
 
 
+logger = logging.getLogger(__name__)
+
+
+# Slack success
+
+def send_success_notification(metrics: dict) -> None:
+
+    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
+
+    message = f"""
+*Training pipeline completed successfully*
+
+*Split version:* {metrics['split_version']}
+*Feature version:* {metrics['feature_version']}
+*Model version:* {metrics['model_version']}
+
+*Master rows:* {metrics.get('master_rows')}
+*Train rows:* {metrics.get('train_rows')}
+*Reference rows:* {metrics.get('reference_rows')}
+*Reference created:* {metrics.get('reference_created')}
+
+*Split duration:* {metrics.get('split_duration')}s
+*Training duration:* {metrics.get('training_duration')}s
+*Evaluation duration:* {metrics.get('evaluation_duration')}s
+
+*Train RMSE:* {metrics.get('train_rmse')}
+*Reference RMSE:* {metrics.get('reference_rmse')}
+
+*Promoted:* {metrics.get('promoted')}
+*Candidate score:* {metrics.get('candidate_metric')}
+*Production score:* {metrics.get('production_metric')}
+*Delta:* {metrics.get('delta')}
+*New model version:* {metrics.get('new_model_version')}
+"""
+
+    hook.send(text=message)
+
+
+# Slack failure
+
+def slack_alert(context):
+
+    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
+
+    exception = context.get("exception")
+    task_id = context["task_instance"].task_id
+    dag_id = context["dag"].dag_id
+
+    hook.send(
+        text=f"""
+*Training Pipeline Failure*
+
+*DAG:* {dag_id}
+*Task:* {task_id}
+
+*Error:*
+{exception}
+"""
+    )
+
+
 @dag(
     dag_id="train_pipeline_dag",
     start_date=pendulum.today("UTC").add(days=-1),
     schedule=None,
     catchup=False,
     tags=["training", "ml"],
+    default_args={"on_failure_callback": slack_alert},
 )
 def train_pipeline():
 
-    # Resolve runtime configuration
+    # Resolve config
 
     @task
     def resolve_runtime_config():
@@ -60,11 +136,9 @@ def train_pipeline():
         if model_version not in get_allowed_model_versions():
             raise ValueError(f"Invalid model_version: {model_version}")
 
-        logging.info(
-            f"Resolved config → "
-            f"split={split_version}, "
-            f"feature={feature_version}, "
-            f"model={model_version}"
+        logger.info(
+            f"Resolved config → split={split_version}, "
+            f"feature={feature_version}, model={model_version}"
         )
 
         return {
@@ -84,97 +158,127 @@ def train_pipeline():
             run_id = run.info.run_id
             mlflow.log_params(config)
 
-        logging.info(f"Started MLflow run {run_id}")
+        logger.info(f"Started MLflow run {run_id}")
 
-        return {
-            "run_id": run_id
-        }
+        return {"run_id": run_id}
 
-    # Data splitting
+    # Split
 
     @task
-    def split_task(config: dict):
+    def split_task(config: dict, run_info: dict):
 
-        reference_created = run_split_pipeline(
+        split_output = run_split_pipeline(
             split_version=config["split_version"]
         )
 
+        run_id = run_info["run_id"]
+
+        configure_mlflow()
+
+        with mlflow.start_run(run_id=run_id):
+            mlflow.log_metrics(split_output["metrics"])
+            mlflow.log_params(split_output["params"])
+
         return {
-            "reference_created": reference_created
+            **config,
+            **split_output["metrics"],
+            **split_output["params"],
         }
 
-    # Version splits and log lineage
+    # Version splits
 
     @task
-    def version_splits(config: dict, run_info: dict, split_info: dict):
+    def version_splits(training_context: dict, run_info: dict):
 
         run_id = run_info["run_id"]
-        reference_created = split_info["reference_created"]
+        split_version = training_context["split_version"]
+        reference_created = training_context["reference_created"]
 
         configure_mlflow()
 
         with mlflow.start_run(run_id=run_id):
 
-            dvc_add_split(config["split_version"])
+            dvc_add_split(split_version)
 
             if reference_created:
-                dvc_add_reference(config["split_version"])
+                dvc_add_reference(split_version)
 
             lineage = {
-                k: v for k, v in get_data_lineage(config["split_version"]).items()
+                k: v
+                for k, v in get_data_lineage(split_version).items()
                 if v is not None
             }
+
             if lineage:
                 mlflow.log_params(lineage)
 
-    # Train model
+        return training_context
+
+    # Train
 
     @task
-    def train_task(config: dict, run_info: dict):
+    def train_task(training_context: dict, run_info: dict):
 
-        train_model(
+        train_metrics = train_model(
             run_id=run_info["run_id"],
-            **config,
+            split_version=training_context["split_version"],
+            feature_version=training_context["feature_version"],
+            model_version=training_context["model_version"],
         )
 
-    # Evaluate model
+        return {**training_context, **train_metrics}
+
+    # Evaluate
 
     @task
-    def evaluate_task(config: dict, run_info: dict):
+    def evaluate_task(training_context: dict, run_info: dict):
 
-        evaluate_model(
+        eval_metrics = evaluate_model(
             run_id=run_info["run_id"],
-            split_version=config["split_version"],
-            feature_version=config["feature_version"],
+            split_version=training_context["split_version"],
+            feature_version=training_context["feature_version"],
         )
 
-    # Promote model
+        return {**training_context, **eval_metrics}
+
+    # Promote
 
     @task
-    def promote_task(run_info: dict):
+    def promote_task(training_context: dict, run_info: dict):
 
         run_id = run_info["run_id"]
 
         configure_mlflow()
 
-        promote_if_better(run_id)
+        promotion_info = promote_if_better(run_id)
 
         with mlflow.start_run(run_id=run_id):
             mlflow.set_tag("pipeline_status", "completed")
+            mlflow.set_tag("model_promoted", promotion_info["promoted"])
+
+        return {**training_context, **promotion_info}
+
+    # Notify
+
+    @task
+    def notify_success_task(training_context: dict):
+        send_success_notification(training_context)
 
     # DAG flow
 
-    resolve_config = resolve_runtime_config()
-    initialize_run = start_experiment_run(resolve_config)
-    split_data = split_task(resolve_config)
+    config = resolve_runtime_config()
+    run_info = start_experiment_run(config)
 
-    version_data = version_splits(resolve_config, initialize_run, split_data)
+    split_context = split_task(config, run_info)
+    versioned_context = version_splits(split_context, run_info)
 
-    train = train_task(resolve_config, initialize_run)
-    evaluate = evaluate_task(resolve_config, initialize_run)
-    promote_model = promote_task(initialize_run)
+    trained_context = train_task(versioned_context, run_info)
+    evaluated_context = evaluate_task(trained_context, run_info)
 
-    resolve_config >> initialize_run >> split_data >> version_data >> train >> evaluate >> promote_model
+    promoted_context = promote_task(evaluated_context, run_info)
+    notify = notify_success_task(promoted_context)
+
+    config >> run_info >> split_context >> versioned_context >> trained_context >> evaluated_context >> promoted_context >> notify
 
 
 train_pipeline()
