@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+from bisect import bisect_right
 from typing import Optional
 
 import numpy as np
@@ -37,20 +38,206 @@ app = FastAPI(
 
 # Prometheus metrics
 
-request_count = Counter(
+api_requests_total = Counter(
     "api_requests_total",
-    "Total API requests"
+    "Total number of API requests",
+    ["endpoint", "method", "status_code"],
 )
 
-request_latency = Histogram(
+api_request_duration_seconds = Histogram(
     "api_request_duration_seconds",
-    "API request latency in seconds"
+    "API request duration in seconds",
+    ["endpoint", "method", "status_code"],
 )
 
-model_version_gauge = Gauge(
-    "served_model_version",
-    "Model version served"
+predictions_by_category = Counter(
+    "predictions_by_category",
+    "Number of predictions by category",
+    ["category"],
 )
+
+prediction_confidence_score_histogram = Histogram(
+    "prediction_confidence_score_histogram",
+    "Prediction confidence score histogram",
+    buckets=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
+)
+
+served_model_version_gauge = Gauge(
+    "served_model_version",
+    "Model version served",
+)
+
+
+def _record_request_metrics(
+    endpoint: str,
+    method: str,
+    status_code: int,
+    start_time: float,
+) -> None:
+    labels = {
+        "endpoint": endpoint,
+        "method": method,
+        "status_code": str(status_code),
+    }
+    api_requests_total.labels(**labels).inc()
+    api_request_duration_seconds.labels(**labels).observe(
+        time.time() - start_time
+    )
+
+
+def _parse_thresholds(raw: str | None) -> list[float]:
+    if not raw:
+        return []
+    thresholds: list[float] = []
+    for item in raw.split(","):
+        value = item.strip()
+        if not value:
+            continue
+        try:
+            thresholds.append(float(value))
+        except ValueError:
+            logging.warning(
+                "Invalid PREDICTION_CATEGORY_THRESHOLDS value: %s", value
+            )
+            return []
+    return sorted(thresholds)
+
+
+def _resolve_threshold_labels(
+    raw: str | None,
+    bucket_count: int,
+) -> list[str]:
+    if raw:
+        labels = [label.strip() for label in raw.split(",") if label.strip()]
+        if len(labels) == bucket_count:
+            return labels
+        logging.warning(
+            "PREDICTION_CATEGORY_LABELS ignored: expected %d labels, got %d",
+            bucket_count,
+            len(labels),
+        )
+    if bucket_count == 3:
+        return ["low", "medium", "high"]
+    if bucket_count == 4:
+        return ["low", "medium", "high", "very_high"]
+    return [f"bucket_{idx}" for idx in range(bucket_count)]
+
+
+PREDICTION_CATEGORY_FIELD = os.getenv(
+    "PREDICTION_CATEGORY_FIELD",
+    "region_economic_classification",
+)
+PREDICTION_CATEGORY_THRESHOLDS = _parse_thresholds(
+    os.getenv("PREDICTION_CATEGORY_THRESHOLDS")
+)
+PREDICTION_CATEGORY_LABELS = (
+    _resolve_threshold_labels(
+        os.getenv("PREDICTION_CATEGORY_LABELS"),
+        len(PREDICTION_CATEGORY_THRESHOLDS) + 1,
+    )
+    if PREDICTION_CATEGORY_THRESHOLDS
+    else []
+)
+CONFIDENCE_MAX_ESTIMATORS = int(
+    os.getenv("CONFIDENCE_MAX_ESTIMATORS", "50")
+)
+
+
+def _resolve_prediction_category(
+    payload: dict,
+    prediction_value: float,
+) -> str:
+    field_value = payload.get(PREDICTION_CATEGORY_FIELD)
+    if field_value not in (None, ""):
+        return str(field_value)
+
+    explicit = payload.get("category")
+    if explicit not in (None, ""):
+        return str(explicit)
+
+    if PREDICTION_CATEGORY_THRESHOLDS:
+        bucket_index = bisect_right(
+            PREDICTION_CATEGORY_THRESHOLDS,
+            prediction_value,
+        )
+        return PREDICTION_CATEGORY_LABELS[bucket_index]
+
+    return "unknown"
+
+
+def _unwrap_model_for_confidence(model_obj: object) -> object:
+    impl = getattr(model_obj, "_model_impl", None)
+    if impl is not None:
+        underlying = getattr(impl, "model", None)
+        if underlying is not None:
+            return underlying
+    return model_obj
+
+
+def _confidence_from_proba(
+    model_obj: object,
+    input_df: pd.DataFrame,
+) -> float | None:
+    predict_proba = getattr(model_obj, "predict_proba", None)
+    if predict_proba is None:
+        return None
+    try:
+        probabilities = predict_proba(input_df)
+    except Exception:
+        return None
+    if probabilities is None or len(probabilities) == 0:
+        return None
+    return float(np.max(probabilities[0]))
+
+
+def _confidence_from_ensemble(
+    model_obj: object,
+    input_df: pd.DataFrame,
+) -> float | None:
+    estimators = getattr(model_obj, "estimators_", None)
+    if estimators is None:
+        return None
+
+    preds: list[float] = []
+
+    def _add_prediction(estimator: object) -> None:
+        if estimator is None:
+            return
+        predict = getattr(estimator, "predict", None)
+        if predict is None:
+            return
+        preds.append(float(predict(input_df)[0]))
+
+    if isinstance(estimators, (list, tuple, np.ndarray)):
+        for estimator in estimators:
+            if len(preds) >= CONFIDENCE_MAX_ESTIMATORS:
+                break
+            if isinstance(estimator, (list, tuple, np.ndarray)):
+                for sub_estimator in estimator:
+                    if len(preds) >= CONFIDENCE_MAX_ESTIMATORS:
+                        break
+                    _add_prediction(sub_estimator)
+            else:
+                _add_prediction(estimator)
+
+    if not preds:
+        return None
+
+    std = float(np.std(preds))
+    return float(np.exp(-std))
+
+
+def _compute_confidence_score(
+    model_obj: object,
+    input_df: pd.DataFrame,
+) -> float | None:
+    base_model = _unwrap_model_for_confidence(model_obj)
+    score = _confidence_from_proba(base_model, input_df)
+    if score is None:
+        score = _confidence_from_ensemble(base_model, input_df)
+    if score is None:
+        return None
+    return float(min(max(score, 0.0), 1.0))
 
 
 # Global state (loaded at startup)
@@ -112,7 +299,7 @@ def startup_event():
 
         if served_model_version is not None:
             try:
-                model_version_gauge.set(float(served_model_version))
+                served_model_version_gauge.set(float(served_model_version))
             except ValueError:
                 logging.warning("Model version is not numeric, gauge not set.")
 
@@ -132,7 +319,15 @@ def startup_event():
 @app.post("/predict")
 def predict(payload: dict, internal=Depends(require_internal_token)):
 
+    endpoint = "/predict"
+    method = "POST"
     if model is None:
+        _record_request_metrics(
+            endpoint,
+            method,
+            503,
+            time.time(),
+        )
         raise HTTPException(
             status_code=503,
             detail="No production model loaded"
@@ -151,8 +346,17 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
         prediction = model.predict(input_df)
         prediction_value = float(prediction[0])
 
-        request_count.inc()
-        request_latency.observe(time.time() - start_time)
+        _record_request_metrics(
+            endpoint,
+            method,
+            200,
+            start_time,
+        )
+        category = _resolve_prediction_category(input_dict, prediction_value)
+        predictions_by_category.labels(category=str(category)).inc()
+        confidence_score = _compute_confidence_score(model, input_df)
+        if confidence_score is not None:
+            prediction_confidence_score_histogram.observe(confidence_score)
 
         return {
             "prediction": prediction_value,
@@ -162,6 +366,12 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
 
     except Exception:
         logging.exception("Prediction error")
+        _record_request_metrics(
+            endpoint,
+            method,
+            500,
+            start_time,
+        )
         raise HTTPException(
             status_code=500,
             detail="Prediction failed"
@@ -170,19 +380,34 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
 
 # Health endpoint
 
-@app.get("/health")
-def health(internal=Depends(require_internal_token)):
-
+def _build_health_payload() -> dict:
     if model is None:
         return {
-            "status": "no_model_loaded"
+            "status": "no_model_loaded",
+            "message": "Il n'y a pas de modèle actuellement.",
         }
-
     return {
         "status": "ok",
         "model_version": served_model_version,
         "feature_version": feature_version,
     }
+
+
+@app.get("/info")
+def info(internal=Depends(require_internal_token)):
+    start_time = time.time()
+    payload = _build_health_payload()
+    _record_request_metrics(
+        "/info",
+        "GET",
+        200,
+        start_time,
+    )
+    return payload
+
+@app.get("/health")
+def health(internal=Depends(require_internal_token)):
+    return _build_health_payload()
 
 
 # Prometheus metrics endpoint

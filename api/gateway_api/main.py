@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.responses import Response
+from prometheus_client import generate_latest
 
 from routers.training import router as training_router
 from routers.pipeline import router as pipeline_router
@@ -33,3 +35,11 @@ app.include_router(feature_router)
 app.include_router(data_contract_router)
 app.include_router(model_schemas_router)
 app.include_router(auth_router)
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(
+        generate_latest(),
+        media_type="text/plain",
+    )
