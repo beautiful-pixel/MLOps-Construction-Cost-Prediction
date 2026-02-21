@@ -66,6 +66,9 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+      GATEWAY_DB_NAME: ${GATEWAY_DB_NAME:-gateway_api}
+      GATEWAY_DB_USER: ${GATEWAY_DB_USER:-gateway}
+      GATEWAY_DB_PASSWORD: ${GATEWAY_DB_PASSWORD:-gateway}
     volumes:
       - airflow_db:/var/lib/postgresql/data
       - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
@@ -120,6 +123,11 @@ services:
       <<: *api-env
       INFERENCE_API_URL: ${INFERENCE_API_URL:-http://inference-api:8000}
       AIRFLOW_URL: ${AIRFLOW_URL:-http://airflow-webserver:8080}
+      GATEWAY_DB_HOST: ${GATEWAY_DB_HOST:-postgres}
+      GATEWAY_DB_PORT: ${GATEWAY_DB_PORT:-5432}
+      GATEWAY_DB_NAME: ${GATEWAY_DB_NAME:-gateway_api}
+      GATEWAY_DB_USER: ${GATEWAY_DB_USER:-gateway}
+      GATEWAY_DB_PASSWORD: ${GATEWAY_DB_PASSWORD:-gateway}
     depends_on:
       - airflow-webserver
       - mlflow
@@ -168,6 +176,8 @@ services:
     image: grafana/grafana:latest
     expose:
       - 3000
+    ports:
+      - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
@@ -203,15 +213,15 @@ services:
     restart: always
 
   # ---------- Node Exporter ----------
-  node-exporter:
-    image: prom/node-exporter:latest
-    expose:
-      - 9100
-    volumes:
-      - /:/host:ro,rslave
-    command:
-      - '--path.rootfs=/host'
-    restart: always
+  # node-exporter:
+  #   image: prom/node-exporter:latest
+  #   expose:
+  #     - 9100
+  #   volumes:
+  #     - /:/host:ro,rslave
+  #   command:
+  #     - '--path.rootfs=/host'
+  #   restart: always
 
 
 

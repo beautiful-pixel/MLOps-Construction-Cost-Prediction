@@ -18,6 +18,7 @@ Version resolution and overrides must happen at orchestration level
 """
 import os
 from pathlib import Path
+import os
 from typing import Dict
 import yaml
 
@@ -41,9 +42,6 @@ if not ACTIVE_CONFIG_PATH.exists():
     raise FileNotFoundError(
         f"Active config file not found at {ACTIVE_CONFIG_PATH}"
     )
-
-# PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# ACTIVE_CONFIG_PATH = PROJECT_ROOT / "configs" / "active_config.yaml"
 
 
 # Core loader
@@ -211,5 +209,3 @@ def set_default_model_version(version: int) -> None:
         )
 
     _update_training_default("model_version", version)
-
-
