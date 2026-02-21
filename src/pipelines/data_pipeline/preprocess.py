@@ -12,6 +12,7 @@ Master writes are performed atomically.
 """
 
 from pathlib import Path
+import os
 import pandas as pd
 import logging
 import time
@@ -33,7 +34,10 @@ from data.linked_files import (
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 PROCESSED_ROOT = PROJECT_ROOT / "data" / "processed"
 IMAGES_ROOT = PROJECT_ROOT / "data" / "images"

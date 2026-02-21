@@ -13,13 +13,17 @@ Used by:
 """
 
 from pathlib import Path
+import os
 from typing import Dict, List
 import yaml
 
 
 # Paths
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 CONFIG_ROOT = PROJECT_ROOT / "configs"
 
 
@@ -97,4 +101,3 @@ def load_versioned_yaml(folder_name: str, version: int) -> Dict:
         )
 
     return config
-

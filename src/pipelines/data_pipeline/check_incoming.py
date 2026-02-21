@@ -1,10 +1,14 @@
 from pathlib import Path
+import os
 from airflow.exceptions import AirflowSkipException
 from datetime import datetime, timedelta
 import logging
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 INCOMING_DIR = PROJECT_ROOT / "data" / "incoming"
 
 def check_and_lock_ready(max_processing_age_minutes: int = 60) -> None:

@@ -14,6 +14,7 @@ This module:
 """
 
 from pathlib import Path
+import os
 import logging
 import pandas as pd
 import mlflow
@@ -39,7 +40,10 @@ from training.metrics import compute_metrics
 
 # Paths
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 SPLITS_ROOT = PROJECT_ROOT / "data" / "splits"
 
 

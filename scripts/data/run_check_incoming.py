@@ -1,11 +1,15 @@
 import logging
 import sys
 from pathlib import Path
+import os
 from utils.logger import setup_logging
 
 from pipelines.data_pipeline.check_incoming import check_and_lock_ready
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 
 INCOMING_DIR = PROJECT_ROOT / "data" / "incoming"
 

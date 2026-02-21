@@ -12,6 +12,7 @@ Metrics are logged to the existing MLflow run.
 
 from mlflow.tracking import MlflowClient
 from pathlib import Path
+import os
 from typing import Dict
 import logging
 import pandas as pd
@@ -29,7 +30,10 @@ from models.loader import load_model_from_run
 
 # Paths
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 REFERENCE_ROOT = PROJECT_ROOT / "data" / "reference" / "tests"
 SPLITS_ROOT = PROJECT_ROOT / "data" / "splits"
 

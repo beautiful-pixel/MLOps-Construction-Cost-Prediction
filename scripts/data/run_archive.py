@@ -11,10 +11,14 @@ is already moved to the raw directory and versioned with DVC.
 import logging
 import sys
 from pathlib import Path
+import os
 import shutil
 from utils.logger import setup_logging
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 
 INCOMING_DIR = PROJECT_ROOT / "data" / "incoming"
 ARCHIVE_DIR = PROJECT_ROOT / "data" / "archive"

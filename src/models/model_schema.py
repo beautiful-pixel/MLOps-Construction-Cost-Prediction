@@ -18,6 +18,7 @@ This ensures:
 """
 
 from pathlib import Path
+import os
 from typing import Dict, List, Type
 import yaml
 
@@ -27,7 +28,10 @@ from sklearn.linear_model import Ridge
 
 # Paths
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 MODEL_CONFIG_DIR = PROJECT_ROOT / "configs" / "models"
 
 

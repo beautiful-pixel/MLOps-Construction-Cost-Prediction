@@ -12,6 +12,7 @@ Split logic remains pure and isolated from IO.
 
 
 from pathlib import Path
+import os
 from typing import Dict, Tuple
 import logging
 import pandas as pd
@@ -23,7 +24,10 @@ from splitting.split_schema import get_allowed_split_versions, generate_split
 
 # Paths
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 PROCESSED_ROOT = PROJECT_ROOT / "data" / "processed"
 REFERENCE_ROOT = PROJECT_ROOT / "data" / "reference" / "tests"
 SPLITS_ROOT = PROJECT_ROOT / "data" / "splits"

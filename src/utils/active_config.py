@@ -18,6 +18,7 @@ Version resolution and overrides must happen at orchestration level
 """
 
 from pathlib import Path
+import os
 from typing import Dict
 import yaml
 
@@ -28,7 +29,10 @@ from splitting.split_schema import get_split_versions_for_contract
 
 # Paths
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 ACTIVE_CONFIG_PATH = PROJECT_ROOT / "configs" / "active_config.yaml"
 
 
@@ -197,5 +201,3 @@ def set_default_model_version(version: int) -> None:
         )
 
     _update_training_default("model_version", version)
-
-

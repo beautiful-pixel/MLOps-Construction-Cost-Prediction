@@ -242,6 +242,8 @@ Clone the repository:
 Configure environment variables:
 
     cp .env.example .env
+    # For Docker Compose (deployments), ensure PROJECT_ROOT is set
+    # Example: PROJECT_ROOT=/app in deployments/.env
 
 Start all services:
 

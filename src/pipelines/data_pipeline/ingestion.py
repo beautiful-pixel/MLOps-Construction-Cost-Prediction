@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from datetime import datetime
 from uuid import uuid4
 import shutil
@@ -10,7 +11,10 @@ from data.data_contract import get_data_contract_versions, load_data_contract
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 INCOMING_DIR = PROJECT_ROOT / "data" / "incoming"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 IGNORED_FILENAMES = {".DS_Store", "Thumbs.db"}

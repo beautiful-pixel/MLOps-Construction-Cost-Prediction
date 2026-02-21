@@ -2,9 +2,13 @@
 
 import shutil
 from pathlib import Path
+import os
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT_ENV = os.getenv("PROJECT_ROOT")
+if not PROJECT_ROOT_ENV:
+    raise RuntimeError("PROJECT_ROOT env var is required")
+PROJECT_ROOT = Path(PROJECT_ROOT_ENV)
 
 SOURCE_IMAGES = PROJECT_ROOT / "data" / "source" / "train_composite"
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
