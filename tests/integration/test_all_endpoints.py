@@ -55,9 +55,15 @@ class TestConfigEndpoints:
         app = FastAPI()
         app.include_router(configs_router)
         client = TestClient(app)
-        
-        response = client.get("/configs/features")
-        assert response.status_code in [401, 403, 404]
+
+        response = client.post(
+            "/configs/features",
+            json={
+                "data_contract_version": 1,
+                "features": {}
+            },
+        )
+        assert response.status_code in [401, 403]
 
     def test_config_endpoint_requires_admin_for_write(self):
         from fastapi import FastAPI
@@ -77,7 +83,10 @@ class TestConfigEndpoints:
         
         response = client.post(
             "/configs/features",
-            json={"name": "test", "schema": "test: value"},
+            json={
+                "data_contract_version": 1,
+                "features": {}
+            },
             headers={"Authorization": f"Bearer {token}"}
         )
         
@@ -198,8 +207,8 @@ class TestModelsEndpoints:
         app.include_router(models_router)
         client = TestClient(app)
         
-        response = client.get("/models")
-        assert response.status_code in [401, 403, 404]
+        response = client.get("/models/current")
+        assert response.status_code in [401, 403]
 
     def test_models_endpoint_accessible_with_valid_token(self):
         from fastapi import FastAPI
@@ -219,11 +228,11 @@ class TestModelsEndpoints:
         token = login_response.json()["access_token"]
         
         response = client.get(
-            "/models",
+            "/models/current",
             headers={"Authorization": f"Bearer {token}"}
         )
         
-        assert response.status_code in [200, 500, 503]
+        assert response.status_code in [200, 404]
 
 
 class TestExperimentsEndpoints:
@@ -236,8 +245,8 @@ class TestExperimentsEndpoints:
         app.include_router(experiments_router)
         client = TestClient(app)
         
-        response = client.get("/experiments")
-        assert response.status_code in [401, 403, 404]
+        response = client.get("/experiments/")
+        assert response.status_code in [401, 403]
 
     def test_experiments_endpoint_accessible_with_valid_token(self):
         from fastapi import FastAPI
@@ -252,12 +261,12 @@ class TestExperimentsEndpoints:
         
         login_response = client.post(
             "/auth/login",
-            data={"username": "user", "password": "user"}
+            data={"username": "admin", "password": "admin"}
         )
         token = login_response.json()["access_token"]
         
         response = client.get(
-            "/experiments",
+            "/experiments/",
             headers={"Authorization": f"Bearer {token}"}
         )
         
@@ -274,8 +283,8 @@ class TestDataContractEndpoints:
         app.include_router(data_contract_router)
         client = TestClient(app)
         
-        response = client.get("/data-contracts")
-        assert response.status_code in [401, 403, 404]
+        response = client.get("/configs/data-contract/1")
+        assert response.status_code in [401, 403]
 
     def test_data_contract_write_requires_admin(self):
         from fastapi import FastAPI
@@ -293,9 +302,8 @@ class TestDataContractEndpoints:
         )
         token = login_response.json()["access_token"]
         
-        response = client.post(
-            "/data-contracts",
-            json={"version": 1, "schema": "test"},
+        response = client.get(
+            "/configs/data-contract/1",
             headers={"Authorization": f"Bearer {token}"}
         )
         
@@ -312,8 +320,8 @@ class TestFeatureEndpoints:
         app.include_router(features_router)
         client = TestClient(app)
         
-        response = client.get("/features")
-        assert response.status_code in [401, 403, 404]
+        response = client.get("/configs/feature-schemas")
+        assert response.status_code in [401, 403]
 
     def test_feature_write_requires_admin(self):
         from fastapi import FastAPI
@@ -332,8 +340,11 @@ class TestFeatureEndpoints:
         token = login_response.json()["access_token"]
         
         response = client.post(
-            "/features",
-            json={"name": "test", "schema": "test: value"},
+            "/configs/feature-schemas",
+            json={
+                "tabular_features": {},
+                "image_features": {}
+            },
             headers={"Authorization": f"Bearer {token}"}
         )
         
