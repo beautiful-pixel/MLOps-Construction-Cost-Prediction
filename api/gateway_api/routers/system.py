@@ -3,8 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from services.system_service import SystemService
 from services.security import require_admin, require_user
 from services.mlflow_client import mlflow_service
-from registry.run_metadata import get_run_metrics, get_run_config
-from utils.data_versioning import get_data_lineage
+from registry.run_metadata import get_run_metrics, get_run_params
 
 router = APIRouter(
     prefix="",
@@ -39,6 +38,7 @@ def get_system_info(user=Depends(require_user)):
             detail="Production model run_id not available",
         )
 
+    # Metrics
     all_metrics = get_run_metrics(run_id)
     key_metric_names = [
         "reference_rmsle",
@@ -62,26 +62,36 @@ def get_system_info(user=Depends(require_user)):
         "metrics": key_metrics,
     }
 
+    # Timestamp
     try:
         run = mlflow_service.client.get_run(run_id)
         timestamp_ms = run.info.end_time or run.info.start_time
     except Exception:
         timestamp_ms = None
 
-    if timestamp_ms:
-        payload["model_last_updated_at"] = datetime.fromtimestamp(
-            timestamp_ms / 1000,
-            tz=timezone.utc,
-        ).isoformat()
-    else:
-        payload["model_last_updated_at"] = None
+    payload["model_last_updated_at"] = (
+        datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat()
+        if timestamp_ms
+        else None
+    )
 
+    # Admin-only lineage (from MLflow params)
     if user.get("role") == "admin":
         try:
-            config = get_run_config(run_id)
-            lineage = get_data_lineage(config["split_version"])
+            params = get_run_params(run_id)
+
+            lineage_keys = [
+                "raw_data_version",
+                "reference_version",
+                "split_version",
+                "dataset_hash",
+                "batch_id",
+            ]
+
+            lineage = {k: params[k] for k in lineage_keys if k in params}
         except Exception:
             lineage = None
+
         payload["data_version"] = lineage
 
     return payload

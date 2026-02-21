@@ -1,6 +1,11 @@
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
+import os
+
+# Load test environment variables early so modules pick up CONFIG_DIR/DATA_DIR
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent.parent / ".env.test")
 
 import pytest
 from passlib.context import CryptContext

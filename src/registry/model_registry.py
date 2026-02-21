@@ -76,27 +76,16 @@ def get_production_model(
 
 def get_production_run_id(model_name: str) -> Optional[str]:
     """
-    Retrieve the run_id of the model currently in Production stage.
-
-    This function uses the legacy stage API for compatibility.
-
-    Args:
-        model_name: Registered model name.
-
-    Returns:
-        Run ID if a production model exists, otherwise None.
+    Retrieve run_id of model aliased as 'prod'
     """
     client = MlflowClient()
 
     try:
-        versions = client.get_latest_versions(
+        model_version = client.get_model_version_by_alias(
             model_name,
-            stages=["Production"],
+            "prod"
         )
     except MlflowException:
         return None
 
-    if not versions:
-        return None
-
-    return versions[0].run_id
+    return model_version.run_id

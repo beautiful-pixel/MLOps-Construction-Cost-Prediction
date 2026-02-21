@@ -24,11 +24,12 @@ from mlflow.tracking import MlflowClient
 from registry.model_registry import get_production_run_id
 from registry.run_metadata import get_run_config
 from utils.io import load_master_dataframe
+from utils.mlflow_config import get_model_name
 
 
 logger = logging.getLogger(__name__)
 
-THRESHOLD_ROWS = 1000
+THRESHOLD_ROWS = 10
 
 
 # Slack notification
@@ -50,7 +51,7 @@ Config:
 - Model version: {config["model_version"]}
 
 Master rows: {decision["current_master_rows"]}
-Last training rows: {decision["last_master_rows"]}
+Last training master rows: {decision["last_master_rows"]}
 New rows since last training: {decision["new_rows"]}
 Threshold: {THRESHOLD_ROWS}
 
@@ -74,7 +75,8 @@ def retrain_policy():
     @task
     def get_production_context() -> Optional[Dict]:
 
-        model_name = os.getenv("MLFLOW_MODEL_NAME")
+        #model_name = os.getenv("MLFLOW_MODEL_NAME")
+        model_name = get_model_name()
 
         prod_run_id = get_production_run_id(model_name)
 
@@ -86,9 +88,7 @@ def retrain_policy():
 
         return {
             "model_name": model_name,
-            "split_version": prod_config.split_version,
-            "feature_version": prod_config.feature_version,
-            "model_version": prod_config.model_version,
+            **prod_config,
         }
 
     # 2. Compute retrain decision
@@ -123,7 +123,7 @@ def retrain_policy():
         else:
             last_run = runs[0]
             last_master_rows = int(
-                last_run.data.params.get("master_rows_at_training", 0)
+                last_run.data.metrics.get("master_rows")
             )
 
         master_df = load_master_dataframe()
@@ -170,7 +170,7 @@ def retrain_policy():
     trigger_train = TriggerDagRunOperator(
         task_id="trigger_train_pipeline",
         trigger_dag_id="train_pipeline_dag",
-        conf="{{ ti.xcom_pull(task_ids='compute_retrain_decision')['config'] }}",
+        conf="{{ ti.xcom_pull(task_ids='compute_retrain_decision')['config'] | tojson }}",
         wait_for_completion=False,
     )
 

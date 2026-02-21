@@ -16,7 +16,7 @@ It only loads and exposes configuration values.
 Version resolution and overrides must happen at orchestration level
 (e.g. in DAGs or CLI entrypoints), not inside core logic modules.
 """
-
+import os
 from pathlib import Path
 from typing import Dict
 import yaml
@@ -27,9 +27,23 @@ from splitting.split_schema import get_split_versions_for_contract
 
 
 # Paths
+CONFIG_ROOT = os.getenv("CONFIG_ROOT")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-ACTIVE_CONFIG_PATH = PROJECT_ROOT / "configs" / "active_config.yaml"
+if not CONFIG_ROOT:
+    raise RuntimeError(
+        "CONFIG_ROOT environment variable is not defined."
+    )
+
+CONFIG_ROOT = Path(CONFIG_ROOT).resolve()
+ACTIVE_CONFIG_PATH = CONFIG_ROOT / "active_config.yaml"
+
+if not ACTIVE_CONFIG_PATH.exists():
+    raise FileNotFoundError(
+        f"Active config file not found at {ACTIVE_CONFIG_PATH}"
+    )
+
+# PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# ACTIVE_CONFIG_PATH = PROJECT_ROOT / "configs" / "active_config.yaml"
 
 
 # Core loader

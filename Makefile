@@ -1,100 +1,135 @@
-PROJECT_NAME=mlops-construction-cost-prediction
-PROJECT_NAME_DEV=$(PROJECT_NAME)-dev
+AIRFLOW_SERVICES := airflow-webserver airflow-scheduler airflow-init
+VALID_SERVICES := $(strip $(shell docker compose -f deployments/compose.yaml config --services))
+RAW_SERVICES := $(filter-out $@,$(MAKECMDGOALS))
+
+SERVICES := $(filter $(VALID_SERVICES),$(RAW_SERVICES))
+
+# Si l'utilisateur demande "airflow", on remplace par tous les services airflow
+ifneq ($(filter airflow,$(RAW_SERVICES)),)
+  SERVICES := $(AIRFLOW_SERVICES)
+endif
+
+SERVICES := $(if $(SERVICES),$(SERVICES),$(VALID_SERVICES))
+
+%:
+	@:
+
+export REPO_ROOT := $(PWD)
+export CONFIG_ROOT := $(PWD)/configs
+export DATA_ROOT := $(PWD)/data
+
+PROJECT_NAME = mlops-construction-cost-prediction
+PROJECT_NAME_DEV = $(PROJECT_NAME)-dev
 
 COMPOSE_DEV = docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml
 COMPOSE_PROD = docker compose -f deployments/compose.yaml -f deployments/compose.prod.yaml
 
 .PHONY: help \
 	start start-dev \
-	stop stop-dev \
+	stop stop-dev stop-service-dev \
 	restart restart-dev \
 	clean clean-dev \
+	build build-dev build-no-cache build-arm \
 	rebuild rebuild-dev \
 	logs logs-dev \
 	ps ps-dev \
-	build-arm \
-	test
+	test test-unit test-integration
 
 help:
-	@echo "Available commands:"
-	@echo "  make start        Start full stack (prod-like)"
-	@echo "  make start-dev    Start stack in dev mode"
-	@echo "  make stop         Stop prod stack"
-	@echo "  make stop-dev     Stop dev stack"
-	@echo "  make restart      Restart prod stack"
-	@echo "  make restart-dev  Restart dev stack"
-	@echo "  make clean        Stop and remove prod volumes"
-	@echo "  make clean-dev    Stop and remove dev volumes"
-	@echo "  make rebuild      Full rebuild prod stack"
-	@echo "  make rebuild-dev  Full rebuild dev stack"
-	@echo "  make logs         Follow prod logs"
-	@echo "  make logs-dev     Follow dev logs"
-	@echo "  make ps           Show prod services"
-	@echo "  make ps-dev       Show dev services"
-	@echo "  make build-arm    Build ARM64 images with buildx"
-	@echo "  make test         Run unit tests"
+	@echo ""
+	@echo "make start-dev [service...]      Start dev stack"
+	@echo "make stop-dev                   Stop dev stack"
+	@echo "make restart-dev [service...]   Restart dev services"
+	@echo "make rebuild-dev [service...]   Rebuild & restart dev services"
+	@echo ""
+	@echo "make logs-dev [service...]      Follow logs"
+	@echo "make ps-dev                     Show running services"
+	@echo ""
+	@echo "make build-dev [service...]     Build services"
+	@echo "make build-no-cache             Build without cache"
+	@echo ""
+	@echo "make test                       Run all tests"
+	@echo "make test-unit                  Run unit tests"
+	@echo "make test-integration           Run integration tests"
+	@echo ""
+
+services:
+	docker compose -f deployments/compose.yaml config --services
 
 start:
+	@echo "Starting services (prod): $(SERVICES)"
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) up -d --build postgres
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) run --rm airflow-init
-	$(COMPOSE_PROD) -p $(PROJECT_NAME) up -d mlflow airflow-webserver airflow-scheduler inference-api streamlit
+	$(COMPOSE_PROD) -p $(PROJECT_NAME) up -d $(SERVICES)
+	@echo "Started"
 
 start-dev:
+	@echo "Starting services (dev): $(SERVICES)"
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --build postgres
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) run --rm airflow-init
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d $(SERVICES)
+	@echo "Started"
 
 stop:
+	@echo "Stopping prod stack"
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) down
+	@echo "Stopped"
 
 stop-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) down
+	@echo "Stopping dev service(s): $(SERVICES)"
+	@if [ "$(SERVICES)" = "$(VALID_SERVICES)" ]; then \
+		$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) down; \
+	else \
+		$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) stop $(SERVICES); \
+	fi
+	@echo "Stopped"
 
 restart:
+	@echo "Restarting prod stack"
 	$(MAKE) stop
 	$(MAKE) start
 
 restart-dev:
-	$(MAKE) stop-dev
-	$(MAKE) start-dev
+	@echo "Restarting services: $(SERVICES)"
+	$(MAKE) stop-dev $(SERVICES)
+	$(MAKE) start-dev $(SERVICES)
 
 clean:
+	@echo "Removing prod stack and volumes"
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) down -v
 
 clean-dev:
+	@echo "Removing dev stack and volumes"
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) down -v
 
 build:
-	$(COMPOSE_PROD) -p $(PROJECT_NAME) build --no-cache
+	@echo "Building services (prod): $(SERVICES)"
+	$(COMPOSE_PROD) -p $(PROJECT_NAME) build --no-cache $(SERVICES)
 
 build-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache
+	@echo "Building services (dev): $(SERVICES)"
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache $(SERVICES)
 
 rebuild:
-	$(MAKE) stop
-	$(MAKE) build
-	$(MAKE) start
+	@echo "Rebuilding services (prod): $(SERVICES)"
+	$(COMPOSE_PROD) -p $(PROJECT_NAME) build $(SERVICES)
+	$(COMPOSE_PROD) -p $(PROJECT_NAME) up -d --force-recreate $(SERVICES)
+	@echo "Rebuild complete"
 
 rebuild-dev:
-	$(MAKE) stop-dev
-	$(MAKE) build-dev
-	$(MAKE) start-dev
-
-bootstrap:
-	$(MAKE) clean
-	$(MAKE) build
-	$(MAKE) start
-
-bootstrap-dev:
-	$(MAKE) clean-dev
-	$(MAKE) build-dev
-	$(MAKE) start-dev
+	@echo "Rebuilding services (dev): $(SERVICES)"
+	$(MAKE) stop-dev $(SERVICES)
+	$(MAKE) build-dev $(SERVICES)
+	$(MAKE) start-dev $(SERVICES)
+	@echo "Rebuild complete"
 
 logs:
-	$(COMPOSE_PROD) -p $(PROJECT_NAME) logs -f
+	@echo "Following logs (prod): $(SERVICES)"
+	$(COMPOSE_PROD) -p $(PROJECT_NAME) logs -f $(SERVICES)
 
 logs-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f
+	@echo "Following logs (dev): $(SERVICES)"
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f $(SERVICES)
 
 ps:
 	$(COMPOSE_PROD) -p $(PROJECT_NAME) ps
@@ -102,83 +137,34 @@ ps:
 ps-dev:
 	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) ps
 
-
-build-arm:
-	docker buildx build --platform linux/arm64 -t $(PROJECT_NAME)-mlflow -f deployments/mlflow/Dockerfile.mlflow .
-	docker buildx build --platform linux/arm64 -t $(PROJECT_NAME)-airflow -f deployments/airflow/Dockerfile.airflow .
-	docker buildx build --platform linux/arm64 -t $(PROJECT_NAME)-inference -f api/inference_api/Dockerfile .
-	docker buildx build --platform linux/arm64 -t $(PROJECT_NAME)-streamlit -f deployments/streamlit/Dockerfile.streamlit .
-
 test:
+	@echo "Running all tests"
+	pytest -v
+
+test-unit:
+	@echo "Running unit tests"
 	pytest -v tests/unit/
 
+test-integration:
+	@echo "Running integration tests"
+	pytest -v tests/integration/
 
+build-arm:
+	@echo "Building ARM64 images"
+	docker buildx build --platform linux/arm64 \
+		-t $(PROJECT_NAME)-mlflow \
+		-f deployments/mlflow/Dockerfile.mlflow .
 
-# ----------------------------
-# Service-level rebuild
-# ----------------------------
+	docker buildx build --platform linux/arm64 \
+		-t $(PROJECT_NAME)-airflow \
+		-f deployments/airflow/Dockerfile.airflow .
 
-rebuild-inference-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache inference-api
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate inference-api
+	docker buildx build --platform linux/arm64 \
+		-t $(PROJECT_NAME)-inference \
+		-f api/inference_api/Dockerfile .
 
-rebuild-gateway-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache gateway-api
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate gateway-api
+	docker buildx build --platform linux/arm64 \
+		-t $(PROJECT_NAME)-streamlit \
+		-f deployments/streamlit/Dockerfile.streamlit .
 
-build-gateway-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache gateway-api	
-
-rebuild-streamlit-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache streamlit
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate streamlit
-
-	
-rebuild-prometheus-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache prometheus
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate prometheus
-
-rebuild-grafana-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) build --no-cache grafana
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate grafana
-
-# ----------------------------
-# Service-level logs
-# ----------------------------
-
-logs-inference-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f inference-api
-
-logs-streamlit-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f streamlit
-
-logs-mlflow-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f mlflow
-
-logs-airflow-webserver-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f airflow-webserver
-
-logs-airflow-scheduler-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) logs -f airflow-scheduler
-
-
-# restart
-
-restart-inference-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) restart inference-api
-
-restart-streamlit-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) restart streamlit
-
-restart-frontend-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) restart inference-api streamlit
-
-start-frontend-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d inference-api gateway-api streamlit
-
-
-restart-nginx-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --force-recreate nginx
-
-start-nginx-dev:
-	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d
+	@echo "ARM64 build complete"

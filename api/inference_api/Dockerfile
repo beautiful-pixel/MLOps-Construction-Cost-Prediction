@@ -13,7 +13,6 @@ COPY src/ src/
 RUN pip install --no-cache-dir ".[inference]"
 
 COPY api/inference_api/main.py .
-COPY configs/ configs/
 
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

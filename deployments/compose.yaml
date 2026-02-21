@@ -6,6 +6,9 @@ x-airflow-env: &airflow-env
   MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
   MLFLOW_EXPERIMENT: ${MLFLOW_EXPERIMENT}
   MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
+  REPO_ROOT: ${AIRFLOW_PROJECT_ROOT}
+  CONFIG_ROOT: ${AIRFLOW_PROJECT_ROOT}/configs
+  DATA_ROOT: ${AIRFLOW_PROJECT_ROOT}/data
 
 
 x-airflow-common: &airflow-common
@@ -23,6 +26,12 @@ x-airflow-common: &airflow-common
     - airflow_home:/opt/airflow
     - ..:/opt/project
     - mlflow_artifacts:/mlflow_artifacts
+
+x-api-env: &api-env
+  INFERENCE_INTERNAL_TOKEN: ${INFERENCE_INTERNAL_TOKEN:-dev-internal-token}
+  MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+  MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
+  CONFIG_ROOT: ${APP_ROOT}/configs
 
 services:
 
@@ -92,12 +101,11 @@ services:
     env_file:
       - .env
     environment:
-      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
-      MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
+      <<: *api-env
       API_TITLE: ${INFERENCE_API_TITLE}
-      INFERENCE_INTERNAL_TOKEN: ${INFERENCE_INTERNAL_TOKEN:-dev-internal-token}
     volumes:
       - mlflow_artifacts:/mlflow_artifacts
+      - ../configs:/app/configs
 
   # ---------- Gateway API ----------
   gateway-api:
@@ -109,10 +117,9 @@ services:
     env_file:
       - .env
     environment:
+      <<: *api-env
       INFERENCE_API_URL: ${INFERENCE_API_URL:-http://inference-api:8000}
-      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
       AIRFLOW_URL: ${AIRFLOW_URL:-http://airflow-webserver:8080}
-      INFERENCE_INTERNAL_TOKEN: ${INFERENCE_INTERNAL_TOKEN:-dev-internal-token}
     depends_on:
       - airflow-webserver
       - mlflow

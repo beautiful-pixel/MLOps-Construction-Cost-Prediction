@@ -129,6 +129,20 @@ if contract_type in ["int", "float"]:
 elif contract_type == "string":
     feature_config["type"] = "categorical"
 
+    # Imputation
+    impute = st.selectbox(
+        "Impute",
+        ["none", "most_frequent", "constant"]
+    )
+
+    if impute != "none":
+        feature_config["impute"] = impute
+
+        if impute == "constant":
+            constant_value = st.text_input("Constant value for missing")
+            if constant_value:
+                feature_config["fill_value"] = constant_value
+
     allowed_values = columns[selected_column].get("allowed_values")
 
     encoding_options = ["onehot"]

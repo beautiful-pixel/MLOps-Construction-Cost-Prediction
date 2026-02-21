@@ -69,8 +69,8 @@ def send_success_notification(metrics: dict) -> None:
 *Training duration:* {metrics.get('training_duration')}s
 *Evaluation duration:* {metrics.get('evaluation_duration')}s
 
-*Train RMSE:* {metrics.get('train_rmse')}
-*Reference RMSE:* {metrics.get('reference_rmse')}
+*Train RMSLE:* {metrics.get('train_rmlse')}
+*Reference RMSLE:* {metrics.get('reference_rmlse')}
 
 *Promoted:* {metrics.get('promoted')}
 *Candidate score:* {metrics.get('candidate_metric')}

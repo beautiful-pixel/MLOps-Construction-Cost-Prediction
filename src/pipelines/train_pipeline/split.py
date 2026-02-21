@@ -9,7 +9,7 @@ This module:
 
 Split logic remains pure and isolated from IO.
 """
-
+import os
 from pathlib import Path
 from typing import Dict
 import logging
@@ -22,11 +22,14 @@ from splitting.split_schema import get_allowed_split_versions, generate_split
 
 logger = logging.getLogger(__name__)
 
+DATA_ROOT = os.getenv("DATA_ROOT")
+if not DATA_ROOT:
+    raise RuntimeError("DATA_ROOT environment variable is not defined")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-PROCESSED_ROOT = PROJECT_ROOT / "data" / "processed"
-REFERENCE_ROOT = PROJECT_ROOT / "data" / "reference" / "tests"
-SPLITS_ROOT = PROJECT_ROOT / "data" / "splits"
+DATA_ROOT = Path(DATA_ROOT).resolve()
+PROCESSED_ROOT = DATA_ROOT / "processed"
+REFERENCE_ROOT = DATA_ROOT / "reference" / "tests"
+SPLITS_ROOT = DATA_ROOT / "splits"
 
 
 def run_split_pipeline(split_version: int) -> dict:

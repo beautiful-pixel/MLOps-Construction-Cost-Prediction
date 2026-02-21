@@ -12,7 +12,7 @@ This module:
 - Fits pipeline
 - Logs artifacts and metrics to an existing MLflow run
 """
-
+import os
 from pathlib import Path
 import logging
 import time
@@ -45,8 +45,12 @@ logger = logging.getLogger(__name__)
 
 # Paths
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-SPLITS_ROOT = PROJECT_ROOT / "data" / "splits"
+DATA_ROOT = os.getenv("DATA_ROOT")
+if not DATA_ROOT:
+    raise RuntimeError("DATA_ROOT environment variable is not defined")
+
+DATA_ROOT = Path(DATA_ROOT).resolve()
+SPLITS_ROOT = DATA_ROOT / "splits"
 
 
 def train_model(
@@ -105,51 +109,51 @@ def train_model(
     n_rows = len(train_df)
     logger.info(f"Training dataset loaded ({n_rows} rows)")
 
-# Validate dataset
+    # Validate dataset
 
-validate_dataframe(train_df, feature_version)
-X, y = extract_features_and_target(train_df, feature_version)
+    validate_dataframe(train_df, feature_version)
+    X, y = extract_features_and_target(train_df, feature_version)
 
-# Build pipeline
-logger.info("Building model")
+    # Build pipeline
+    logger.info("Building model")
 
-preprocessor = build_tabular_model_preprocessor(feature_schema)
-model = build_model(model_version)
+    preprocessor = build_tabular_model_preprocessor(feature_schema)
+    model = build_model(model_version)
 
-pipeline = Pipeline(
-    steps=[
-        ("preprocessor", preprocessor),
-        ("model", model),
-    ]
-)
+    pipeline = Pipeline(
+        steps=[
+            ("preprocessor", preprocessor),
+            ("model", model),
+        ]
+    )
 
-logger.info("Fitting training pipeline")
-pipeline.fit(X, y)
+    logger.info("Fitting training pipeline")
+    pipeline.fit(X, y)
 
-logger.info("Train prediction")
-predictions = pipeline.predict(X)
+    logger.info("Train prediction")
+    predictions = pipeline.predict(X)
 
-metrics = compute_metrics(y, predictions)
-metrics = {f"train_{k}": v for k, v in metrics.items()}
+    metrics = compute_metrics(y, predictions)
+    metrics = {f"train_{k}": v for k, v in metrics.items()}
 
-params = {
-    "model_type": model_schema["model"]["type"],
-    **model_schema["model"].get("params", {}),
-}
+    params = {
+        "model_type": model_schema["model"]["type"],
+        **model_schema["model"].get("params", {}),
+    }
 
-duration = round(time.time() - start_time, 2)
-metrics['training_duration'] = duration
+    duration = round(time.time() - start_time, 2)
+    metrics['training_duration'] = duration
 
-logger.info(f"Training completed in {duration}s")
+    logger.info(f"Training completed in {duration}s")
 
-mlflow.start_run(run_id=run_id)
+    mlflow.start_run(run_id=run_id)
 
-try:
-    mlflow.log_params(params)
-    mlflow.log_metrics(metrics)
-    mlflow.sklearn.log_model(pipeline, artifact_path="model")
+    try:
+        mlflow.log_params(params)
+        mlflow.log_metrics(metrics)
+        mlflow.sklearn.log_model(pipeline, artifact_path="model")
 
-finally:
-    mlflow.end_run()
+    finally:
+        mlflow.end_run()
 
-return metrics
+    return metrics

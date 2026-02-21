@@ -6,7 +6,7 @@ based on reference test metrics.
 
 Promote candidate if it performs better.
 """
-
+import os
 import logging
 from typing import Optional, Dict
 

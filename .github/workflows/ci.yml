@@ -29,6 +29,10 @@ jobs:
       - name: Run tests
         run: |
           pytest
+        env:
+          REPO_ROOT: ${{ github.workspace }}
+          CONFIG_ROOT: ${{ github.workspace }}/configs
+          DATA_ROOT: ${{ github.workspace }}/data
 
       - name: Slack
         if: ${{ always() && env.SLACK_WEBHOOK_URL }}

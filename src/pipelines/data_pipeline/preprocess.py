@@ -10,7 +10,7 @@ For a given raw batch, this module:
 
 Master writes are performed atomically.
 """
-
+import os
 from pathlib import Path
 import pandas as pd
 import logging
@@ -33,10 +33,15 @@ from data.linked_files import (
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
-PROCESSED_ROOT = PROJECT_ROOT / "data" / "processed"
-IMAGES_ROOT = PROJECT_ROOT / "data" / "images"
+DATA_ROOT = os.getenv("DATA_ROOT")
+if not DATA_ROOT:
+    raise RuntimeError("DATA_ROOT environment variable is not defined")
+
+DATA_ROOT = Path(DATA_ROOT).resolve()
+
+RAW_DIR = DATA_ROOT / "raw"
+PROCESSED_ROOT = DATA_ROOT / "processed"
+IMAGES_ROOT = DATA_ROOT / "images"
 
 
 def process_linked_images(

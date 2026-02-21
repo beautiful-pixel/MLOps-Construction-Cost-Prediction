@@ -15,12 +15,17 @@ Used by:
 from pathlib import Path
 from typing import Dict, List
 import yaml
+import os
 
 
 # Paths
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_ROOT = PROJECT_ROOT / "configs"
+# Require explicit CONFIG_ROOT env var. No fallback to project-relative paths.
+CONFIG_ROOT = os.getenv("CONFIG_ROOT")
+if not CONFIG_ROOT:
+    raise RuntimeError("CONFIG_ROOT environment variable is not defined")
+
+CONFIG_ROOT = Path(CONFIG_ROOT).resolve()
 
 
 def _get_config_dir(folder_name: str) -> Path:

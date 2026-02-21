@@ -6,9 +6,9 @@ RUN apt-get update && apt-get install -y build-essential \
 
 USER airflow
 
-WORKDIR /home/airflow/project
+WORKDIR /opt/project
 
 COPY --chown=airflow:airflow pyproject.toml README.md ./
 COPY --chown=airflow:airflow src/ src/
 
-RUN pip install --no-cache-dir ".[airflow]"
+RUN pip install --no-cache-dir -e ".[airflow]"

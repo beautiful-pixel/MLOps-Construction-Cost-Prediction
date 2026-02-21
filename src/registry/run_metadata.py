@@ -8,15 +8,10 @@ This module centralizes read-only interactions with MLflow
 tracking for downstream evaluation and promotion logic.
 """
 
-from typing import Dict, Optional, TypedDict
+from typing import Dict, Optional
 
 from mlflow.tracking import MlflowClient
 
-
-class RunConfig(TypedDict):
-    split_version: int
-    feature_version: int
-    model_version: int
 
 
 def get_run_metrics(run_id: str) -> Dict[str, float]:
@@ -46,7 +41,7 @@ def get_run_metric(run_id: str, metric_name: str) -> Optional[float]:
     return metrics.get(metric_name)
 
 
-def get_run_config(run_id: str) -> RunConfig:
+def get_run_config(run_id: str) -> Dict[str, int]:
     """
     Extract structured configuration from run parameters.
 

@@ -2,8 +2,13 @@ from pathlib import Path
 import pandas as pd
 import os
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PROCESSED_ROOT = PROJECT_ROOT / "data" / "processed"
+# Require DATA_ROOT env var (no fallback)
+DATA_ROOT = os.getenv("DATA_ROOT")
+if not DATA_ROOT:
+    raise RuntimeError("DATA_ROOT environment variable is not defined")
+
+DATA_ROOT = Path(DATA_ROOT).resolve()
+PROCESSED_ROOT = DATA_ROOT / "processed"
 MASTER_PATH = PROCESSED_ROOT / "master.parquet"
 
 

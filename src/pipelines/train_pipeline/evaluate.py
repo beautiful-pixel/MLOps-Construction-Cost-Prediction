@@ -9,7 +9,7 @@ and evaluate it on:
 
 Metrics are logged to the existing MLflow run.
 """
-
+import os
 from pathlib import Path
 from typing import Dict
 import logging
@@ -27,11 +27,13 @@ from models.loader import load_model_from_run
 
 logger = logging.getLogger(__name__)
 
+DATA_ROOT = os.getenv("DATA_ROOT")
+if not DATA_ROOT:
+    raise RuntimeError("DATA_ROOT environment variable is not defined")
 
-# Paths
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-REFERENCE_ROOT = PROJECT_ROOT / "data" / "reference" / "tests"
-SPLITS_ROOT = PROJECT_ROOT / "data" / "splits"
+DATA_ROOT = Path(DATA_ROOT).resolve()
+REFERENCE_ROOT = DATA_ROOT / "reference" / "tests"
+SPLITS_ROOT = DATA_ROOT / "splits"
 
 
 def evaluate_model(

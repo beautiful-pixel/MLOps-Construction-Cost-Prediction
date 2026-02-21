@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from datetime import datetime
 from uuid import uuid4
@@ -5,14 +6,19 @@ import shutil
 import logging
 import time
 
+
 from utils.active_config import get_active_data_contract_version
 from data.data_contract import get_data_contract_versions, load_data_contract
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-INCOMING_DIR = PROJECT_ROOT / "data" / "incoming"
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
+DATA_ROOT = os.getenv("DATA_ROOT")
+if not DATA_ROOT:
+    raise RuntimeError("DATA_ROOT environment variable is not defined")
+
+DATA_ROOT = Path(DATA_ROOT).resolve()
+INCOMING_DIR = DATA_ROOT / "incoming"
+RAW_DIR = DATA_ROOT / "raw"
 IGNORED_FILENAMES = {".DS_Store", "Thumbs.db"}
 
 
@@ -56,14 +62,14 @@ def ingest_incoming_files(
         file
         for ext in tabular_extensions
         for file in INCOMING_DIR.rglob(f"*.{ext}")
-        if file.is_file() and not _is_ignored(file)
+        if file.is_file()
     ]
 
     image_files = [
         file
         for ext in image_extensions
         for file in INCOMING_DIR.rglob(f"*.{ext}")
-        if file.is_file() and not _is_ignored(file)
+        if file.is_file()
     ]
 
     tabular_files = sorted(tabular_files)
@@ -79,6 +85,7 @@ def ingest_incoming_files(
         for file in INCOMING_DIR.rglob("*")
         if file.is_file()
         and file.name not in system_files
+        and not _is_ignored(file)
     }
 
     unknown_files = all_files - recognized_files

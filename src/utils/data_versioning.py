@@ -8,14 +8,23 @@ for raw data, master dataset, splits and reference tests.
 import subprocess
 import logging
 from pathlib import Path
+import os
 import yaml
 
 from typing import Optional, Dict
 
+REPO_ROOT = os.getenv("REPO_ROOT")
+if not REPO_ROOT:
+    raise RuntimeError("REPO_ROOT environment variable is not defined")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_ROOT = os.getenv("DATA_ROOT")
+if not DATA_ROOT:
+    raise RuntimeError("DATA_ROOT environment variable is not defined")
 
-DATA_ROOT = PROJECT_ROOT / "data"
+REPO_ROOT = Path(REPO_ROOT).resolve()
+DATA_ROOT = Path(DATA_ROOT).resolve()
+
+
 RAW_ROOT = DATA_ROOT / "raw"
 PROCESSED_ROOT = DATA_ROOT / "processed"
 IMAGES_ROOT = DATA_ROOT / "images"
@@ -36,14 +45,22 @@ def _dvc_add(path: Path) -> None:
         RuntimeError: If DVC command fails.
     """
 
+
     if not path.exists():
         raise ValueError(f"Path does not exist: {path}")
 
-    logging.info(f"Running: dvc add {path.relative_to(PROJECT_ROOT)}")
+    try:
+        relative_path = path.relative_to(REPO_ROOT)
+    except ValueError:
+        raise RuntimeError(
+            f"Path {path} is not inside REPO_ROOT {REPO_ROOT}"
+        )
+
+    logging.info(f"Running: dvc add {relative_path}")
 
     result = subprocess.run(
-        ["dvc", "add", str(path.relative_to(PROJECT_ROOT))],
-        cwd=PROJECT_ROOT,
+        ["dvc", "add", str(relative_path)],
+        cwd=REPO_ROOT,
         capture_output=True,
         text=True,
     )

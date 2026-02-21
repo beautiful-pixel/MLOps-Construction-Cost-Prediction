@@ -22,6 +22,7 @@ from pipelines.data_pipeline.clean_incoming import clean_incoming
 from utils.data_versioning import dvc_add_raw, dvc_add_master
 
 from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 
 def send_success_notification(metrics: dict) -> None:
