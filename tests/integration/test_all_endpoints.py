@@ -264,13 +264,15 @@ class TestExperimentsEndpoints:
             data={"username": "admin", "password": "admin"}
         )
         token = login_response.json()["access_token"]
-        
-        response = client.get(
-            "/experiments/",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        
-        assert response.status_code in [200, 500, 503]
+
+        with patch("services.mlflow_client.mlflow_service.list_experiments") as mock_list:
+            mock_list.return_value = []
+            response = client.get(
+                "/experiments/",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+
+        assert response.status_code == 200
 
 
 class TestDataContractEndpoints:
