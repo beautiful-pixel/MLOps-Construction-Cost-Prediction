@@ -139,15 +139,22 @@ services:
   # ---------- Prometheus ----------
   prometheus:
     image: prom/prometheus:latest
-    expose:
-      - 9090
+    ports:
+      - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
     depends_on:
       - inference-api
       - gateway-api
       - nginx-exporter
+    restart: always
 
   # ---------- Grafana ----------
   grafana:
@@ -162,6 +169,8 @@ services:
       GF_SECURITY_ALLOW_EMBEDDING: "true"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
 
@@ -186,6 +195,17 @@ services:
       - 9113
     restart: always
 
+  # ---------- Node Exporter ----------
+  node-exporter:
+    image: prom/node-exporter:latest
+    expose:
+      - 9100
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - '--path.rootfs=/host'
+    restart: always
+
 
 
 volumes:
@@ -193,3 +213,4 @@ volumes:
   airflow_home:
   mlflow_artifacts:
   grafana_data:
+  prometheus_data:
