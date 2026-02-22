@@ -20,29 +20,32 @@ from pipelines.data_pipeline.ingestion import ingest_incoming_files
 from pipelines.data_pipeline.preprocess import preprocess_batch
 from pipelines.data_pipeline.clean_incoming import clean_incoming
 from utils.data_versioning import dvc_add_raw, dvc_add_master
+from utils.io import load_master_dataframe
 
 from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.models import Variable
 
 
 def send_success_notification(metrics: dict) -> None:
     hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
 
     message = f"""
-*Data batch processed successfully*
+Data batch processed successfully
 
-*Batch ID:* {metrics['batch_id']}
+Batch ID: {metrics['batch_id']}
 
-*Tabular files:* {metrics['tabular_files']}
-*Images moved (ingestion):* {metrics['image_files']}
+Data:
+- Tabular files: {metrics['tabular_files']}
+- Images moved (ingestion): {metrics['image_files']}
+- Rows in batch: {metrics['rows_batch']}
+- Rows added to master: {metrics['rows_added']}
+- Images processed: {metrics['images_processed']}
 
-*Rows in batch:* {metrics['rows_batch']}
-*Rows added to master:* {metrics['rows_added']}
-*Images processed:* {metrics['images_processed']}
-
-*Ingestion duration:* {metrics['ingestion_duration']}s
-*Preprocess duration:* {metrics['preprocess_duration']}s
-    """
+Durations:
+- Ingestion: {metrics['ingestion_duration']}s
+- Preprocess: {metrics['preprocess_duration']}s
+"""
 
     hook.send(text=message)
 
@@ -55,17 +58,17 @@ def slack_alert(context):
     task_id = context["task_instance"].task_id
     dag_id = context["dag"].dag_id
 
-    hook.send(
-        text=f"""
-*Pipeline Failure*
+    message = f"""
+Data pipeline failure
 
-*DAG:* {dag_id}
-*Task:* {task_id}
+DAG: {dag_id}
+Task: {task_id}
 
-*Error:*
+Error:
 {exception}
 """
-    )
+
+    hook.send(text=message)
 
 
 DEFAULT_ARGS = {
@@ -112,10 +115,19 @@ def data_pipeline():
             **preprocess_metrics,
         }
 
-    @task
-    def version_master_task(metrics: dict) -> dict:
-        dvc_add_master()
-        return metrics
+@task
+def version_master_task(metrics: dict) -> dict:
+    dvc_add_master()
+    master_df = load_master_dataframe()
+    current_master_rows = len(master_df)
+    Variable.set(
+        "CURRENT_MASTER_ROWS",
+        str(current_master_rows),
+    )
+    return {
+        **metrics,
+        "current_master_rows": current_master_rows,
+    }
 
     @task
     def validate_and_clean_incoming_task(metrics: dict):

@@ -12,6 +12,7 @@ from routers.auth import router as auth_router
 from routers.features import router as feature_router
 from routers.data_contract import router as data_contract_router
 from routers.model_schemas import router as model_schemas_router
+from routers.datasets import router as datasets_router
 from routers.auth import router as auth_router
 
 
@@ -32,6 +33,7 @@ app.include_router(auth_router)          # public
 app.include_router(feature_router)
 app.include_router(data_contract_router)
 app.include_router(model_schemas_router)
+app.include_router(datasets_router)
 app.include_router(auth_router)
 
 

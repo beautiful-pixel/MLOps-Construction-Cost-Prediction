@@ -43,18 +43,34 @@ class MlflowService:
     def list_runs(self, experiment_id: str):
         runs = self.client.search_runs(
             experiment_ids=[experiment_id],
-            order_by=["metrics.reference_rmsle ASC"],
+        )
+
+        runs = sorted(
+            runs,
+            key=lambda r: r.data.metrics.get("reference_rmsle", float("inf"))
         )
 
         results = []
 
         for r in runs:
+
+            start_time = r.info.start_time
+            end_time = r.info.end_time
+
+            duration_seconds = None
+            if start_time and end_time:
+                duration_seconds = round((end_time - start_time) / 1000, 2)
+
             results.append(
                 {
                     "run_id": r.info.run_id,
                     "status": r.info.status,
+                    "start_time": start_time,   # epoch ms
+                    "end_time": end_time,       # epoch ms
+                    "run_duration_seconds": duration_seconds,
                     "metrics": r.data.metrics,
                     "params": r.data.params,
+                    "tags": r.data.tags,
                 }
             )
 
@@ -98,6 +114,39 @@ class MlflowService:
             "message": "Model promoted to production",
             "version": mv.version,
         }
+
+    # Get last master_rows metric for a given training configuration
+    def get_last_training_master_rows_for_config(
+        self,
+        split_version: str,
+        feature_version: str,
+        model_version: str,
+    ) -> int:
+
+        filter_string = (
+            f"params.split_version = '{split_version}' and "
+            f"params.feature_version = '{feature_version}' and "
+            f"params.model_version = '{model_version}'"
+        )
+
+        runs = self.client.search_runs(
+            experiment_ids=["0"],
+            filter_string=filter_string,
+            order_by=["attributes.start_time DESC"],
+            max_results=1,
+        )
+
+        if not runs:
+            return 0
+
+        last_run = runs[0]
+
+        master_rows = last_run.data.metrics.get("master_rows")
+
+        if master_rows is None:
+            return 0
+
+        return int(master_rows)
 
 
 # Singleton instance

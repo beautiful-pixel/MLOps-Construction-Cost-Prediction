@@ -2,7 +2,8 @@ import os
 import time
 import logging
 from bisect import bisect_right
-from typing import Optional
+from typing import Optional, Type
+from pydantic import BaseModel
 
 import numpy as np
 import pandas as pd
@@ -16,7 +17,8 @@ from registry.run_metadata import get_run_config
 from utils.logger import setup_logging
 from inference.schema_builder import build_pydantic_model
 from utils.mlflow_config import get_model_name
-from features.feature_schema import get_ordered_features
+from features.feature_schema import get_ordered_features, load_feature_schema
+from data.data_contract import load_data_contract
 
 
 
@@ -245,8 +247,9 @@ def _compute_confidence_score(
 model: Optional[object] = None
 served_model_version: Optional[str] = None
 feature_version: Optional[int] = None
-FEATURE_ORDER: Optional[list[str]] = None
-InputModel = None
+feature_order: Optional[list[str]] = None
+InputModel: Optional[Type[BaseModel]] = None
+target_name: Optional[str] = None
 
 
 def require_internal_token(authorization: str | None = Header(default=None)):
@@ -271,8 +274,9 @@ def startup_event():
     global model
     global served_model_version
     global feature_version
-    global FEATURE_ORDER
+    global feature_order
     global InputModel
+    global target_name
 
     logging.info("Starting inference API initialization")
 
@@ -292,8 +296,13 @@ def startup_event():
         config = get_run_config(run_id)
 
         feature_version = config["feature_version"]
+        feature_schema = load_feature_schema(feature_version)
+        contract_version = feature_schema["data_contract"]
+        data_contract = load_data_contract(contract_version)
 
-        FEATURE_ORDER = get_ordered_features(feature_version)
+        target_name = data_contract["target"]
+
+        feature_order = get_ordered_features(feature_version)
 
         InputModel = build_pydantic_model(feature_version)
 
@@ -360,8 +369,7 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
 
         return {
             "prediction": prediction_value,
-            "model_version": served_model_version,
-            "feature_version": feature_version,
+            "model_version": served_model_version
         }
 
     except Exception:
@@ -378,8 +386,6 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
         )
 
 
-# Health endpoint
-
 def _build_health_payload() -> dict:
     if model is None:
         return {
@@ -388,8 +394,7 @@ def _build_health_payload() -> dict:
         }
     return {
         "status": "ok",
-        "model_version": served_model_version,
-        "feature_version": feature_version,
+        "model_version": served_model_version or "unknown"
     }
 
 
@@ -411,7 +416,6 @@ def health(internal=Depends(require_internal_token)):
 
 
 # Prometheus metrics endpoint
-
 @app.get("/metrics")
 def metrics():
     return Response(
@@ -422,7 +426,12 @@ def metrics():
 # Schema endpoint
 @app.get("/schema")
 def get_schema(internal=Depends(require_internal_token)):
-    if InputModel is None:
+    if InputModel is None or target_name is None:
         raise HTTPException(status_code=503, detail="Model not initialized")
 
-    return InputModel.model_json_schema()
+
+    return {
+        "model_version": served_model_version,
+        "target": target_name,
+        "input_schema": InputModel.model_json_schema(),
+    }

@@ -72,5 +72,44 @@ class AirflowService:
         return response.json()
 
 
+    def get_variable(self, key: str):
+        response = requests.get(
+            f"{self.base_url}/api/v1/variables/{key}",
+            auth=self._auth(),
+            timeout=5,
+        )
+
+        if response.status_code == 404:
+            return None
+
+        response.raise_for_status()
+        return response.json()["value"]
+
+
+    def set_variable(self, key: str, value: str):
+
+        # Try update first
+        response = requests.patch(
+            f"{self.base_url}/api/v1/variables/{key}",
+            json={"value": value},
+            auth=self._auth(),
+            timeout=5,
+        )
+
+        # If variable does not exist, create it
+        if response.status_code in (400, 404):
+            response = requests.post(
+                f"{self.base_url}/api/v1/variables",
+                json={
+                    "key": key,
+                    "value": value,
+                },
+                auth=self._auth(),
+                timeout=5,
+            )
+
+        response.raise_for_status()
+        return response.json()
+
 # Singleton
 airflow_service = AirflowService()

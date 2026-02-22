@@ -19,18 +19,23 @@ import pendulum
 from airflow.decorators import dag, task
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+from airflow.models import Variable
+
 from mlflow.tracking import MlflowClient
 
 from registry.model_registry import get_production_run_id
 from registry.run_metadata import get_run_config
-from utils.io import load_master_dataframe
 from utils.mlflow_config import get_model_name
+
 
 
 logger = logging.getLogger(__name__)
 
-THRESHOLD_ROWS = 10
 
+def get_threshold():
+    return int(
+        Variable.get("RETRAIN_THRESHOLD_ROWS", default_var=10)
+    )
 
 # Slack notification
 
@@ -53,7 +58,7 @@ Config:
 Master rows: {decision["current_master_rows"]}
 Last training master rows: {decision["last_master_rows"]}
 New rows since last training: {decision["new_rows"]}
-Threshold: {THRESHOLD_ROWS}
+Threshold: {threshold}
 
 Training pipeline launched.
 """
@@ -126,8 +131,10 @@ def retrain_policy():
                 last_run.data.metrics.get("master_rows")
             )
 
-        master_df = load_master_dataframe()
-        current_master_rows = len(master_df)
+        current_master_rows = airflow_service.get_variable(
+            "CURRENT_MASTER_ROWS"
+        )
+        current_master_rows = int(current_master_rows) if current_master_rows else 0
 
         new_rows = current_master_rows - last_master_rows
 
@@ -137,7 +144,8 @@ def retrain_policy():
             f"New rows: {new_rows}"
         )
 
-        should_retrain = new_rows > THRESHOLD_ROWS
+        threshold = get_threshold()
+        should_retrain = new_rows > threshold
 
         return {
             "should_retrain": should_retrain,
@@ -150,6 +158,7 @@ def retrain_policy():
             "current_master_rows": current_master_rows,
             "last_master_rows": last_master_rows,
             "new_rows": new_rows,
+            "threshold": threshold,
         }
 
     # 3. Boolean gate (ShortCircuit behavior)

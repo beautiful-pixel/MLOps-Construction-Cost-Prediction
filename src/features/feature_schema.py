@@ -185,7 +185,7 @@ def _validate_tabular_features(df: pd.DataFrame, schema: dict) -> None:
             if not pd.api.types.is_numeric_dtype(df[col]):
                 raise TypeError(f"Column '{col}' must be numeric.")
 
-            if "impute" not in params and df[col].isna().any():
+            if "impute" not in params and df[col].isna().any() or df[col].isin([None]).any():
                 raise ValueError(
                     f"Column '{col}' contains NaN but no imputation configured."
                 )
@@ -276,12 +276,19 @@ def extract_features_and_target(
 
 
 # Schema definition validation
-
 def validate_feature_schema_definition(schema: Dict) -> None:
     """
     Validate structure and integrity of a feature schema definition.
 
     Used when creating a new feature version via API.
+
+    Rules enforced:
+    - All features must exist in referenced data contract
+    - Feature types must be valid
+    - Categorical encodings must be valid
+    - Ordinal features must define an order
+    - If a column is nullable in data contract, an imputation strategy is mandatory
+    - Target must not be defined here (comes from data contract)
     """
 
     # Required top-level keys
@@ -303,15 +310,18 @@ def validate_feature_schema_definition(schema: Dict) -> None:
             f"Referenced data_contract v{contract_version} does not exist."
         )
 
-    contract_columns = set(contract["columns"].keys())
+    contract_columns = contract["columns"]
 
     tabular_features = schema.get("tabular_features", {})
 
     if not tabular_features:
-        raise ValueError("Feature schema must define at least one tabular feature.")
+        raise ValueError(
+            "Feature schema must define at least one tabular feature."
+        )
 
     allowed_feature_types = {"numeric", "categorical"}
     allowed_encodings = {"binary", "ordinal", "onehot"}
+    allowed_imputers = {"mean", "median", "most_frequent", "constant"}
 
     for col, params in tabular_features.items():
 
@@ -321,7 +331,9 @@ def validate_feature_schema_definition(schema: Dict) -> None:
                 f"Feature '{col}' not found in data contract."
             )
 
-        # Type required
+        contract_col = contract_columns[col]
+
+        # Feature type validation
         feature_type = params.get("type")
         if feature_type not in allowed_feature_types:
             raise ValueError(
@@ -329,12 +341,30 @@ def validate_feature_schema_definition(schema: Dict) -> None:
                 f"Allowed types: {allowed_feature_types}"
             )
 
-        # Numeric checks
+        # Nullable rule enforcement
+        is_nullable = not contract_col.get("non_nullable", False)
+
+        if is_nullable and "impute" not in params:
+            raise ValueError(
+                f"Feature '{col}' is nullable in data contract and "
+                f"must define an 'impute' strategy."
+            )
+
+        # Validate imputation strategy if defined
+        if "impute" in params:
+            if params["impute"] not in allowed_imputers:
+                raise ValueError(
+                    f"Feature '{col}' has invalid imputation strategy "
+                    f"'{params['impute']}'. "
+                    f"Allowed strategies: {allowed_imputers}"
+                )
+
+        # Numeric-specific rules
         if feature_type == "numeric":
-            # Nothing mandatory beyond type
+            # Nothing else mandatory beyond nullable rule
             pass
 
-        # Categorical checks
+        # Categorical-specific rules
         if feature_type == "categorical":
 
             encoding = params.get("encoding")
@@ -355,7 +385,7 @@ def validate_feature_schema_definition(schema: Dict) -> None:
                         f"'order' for feature '{col}' must be a list."
                     )
 
-    # Optional: ensure no target defined in feature schema
+    # Ensure target is not defined in feature schema
     if "target" in schema:
         raise ValueError(
             "Feature schema must not define 'target'. "

@@ -1,49 +1,35 @@
 version: 1
-
 data_contract: 1
 
 tabular_features:
+
   deflated_gdp_usd:
     type: numeric
-  us_cpi:
-    type: numeric
     impute: median
+
   straight_distance_to_capital_km:
     type: numeric
     impute: median
     clip: [0, 5000]
+
   developed_country:
     type: categorical
     encoding: binary
-  landlocked:
-    type: categorical
-    encoding: binary
     impute: most_frequent
+
   access_to_highway:
     type: categorical
     encoding: binary
     impute: most_frequent
-  access_to_railway:
-    type: categorical
-    encoding: binary
-    impute: most_frequent
-  access_to_port:
-    type: categorical
-    encoding: binary
-    impute: most_frequent
-  access_to_airport:
-    type: categorical
-    encoding: binary
-    impute: most_frequent
-  flood_risk_class:
-    type: categorical
-    encoding: binary
-    impute: most_frequent
+
   region_economic_classification:
     type: categorical
     encoding: ordinal
     order: [Low income, Lower-middle income, Upper-middle income, High income]
+    impute: most_frequent
+
   seismic_hazard_zone:
     type: categorical
     encoding: ordinal
     order: [Very Low, Low, Moderate, High, Very High]
+    impute: most_frequent

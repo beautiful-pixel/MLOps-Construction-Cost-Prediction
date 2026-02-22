@@ -50,33 +50,37 @@ logger = logging.getLogger(__name__)
 # Slack success
 
 def send_success_notification(metrics: dict) -> None:
-
     hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
 
     message = f"""
-*Training pipeline completed successfully*
+Training pipeline completed successfully
 
-*Split version:* {metrics['split_version']}
-*Feature version:* {metrics['feature_version']}
-*Model version:* {metrics['model_version']}
+Configuration:
+- Split version: {metrics['split_version']}
+- Feature version: {metrics['feature_version']}
+- Model version: {metrics['model_version']}
 
-*Master rows:* {metrics.get('master_rows')}
-*Train rows:* {metrics.get('train_rows')}
-*Reference rows:* {metrics.get('reference_rows')}
-*Reference created:* {metrics.get('reference_created')}
+Data:
+- Master rows: {metrics.get('master_rows')}
+- Train rows: {metrics.get('train_rows')}
+- Reference rows: {metrics.get('reference_rows')}
+- Reference created: {metrics.get('reference_created')}
 
-*Split duration:* {metrics.get('split_duration')}s
-*Training duration:* {metrics.get('training_duration')}s
-*Evaluation duration:* {metrics.get('evaluation_duration')}s
+Durations:
+- Split: {metrics.get('split_duration')}s
+- Training: {metrics.get('training_duration')}s
+- Evaluation: {metrics.get('evaluation_duration')}s
 
-*Train RMSLE:* {metrics.get('train_rmlse')}
-*Reference RMSLE:* {metrics.get('reference_rmlse')}
+Metrics:
+- Train RMSLE: {metrics.get('train_rmlse')}
+- Reference RMSLE: {metrics.get('reference_rmlse')}
 
-*Promoted:* {metrics.get('promoted')}
-*Candidate score:* {metrics.get('candidate_metric')}
-*Production score:* {metrics.get('production_metric')}
-*Delta:* {metrics.get('delta')}
-*New model version:* {metrics.get('new_model_version')}
+Promotion:
+- Promoted: {metrics.get('promoted')}
+- Candidate score: {metrics.get('candidate_metric')}
+- Production score: {metrics.get('production_metric')}
+- Delta: {metrics.get('delta')}
+- New model version: {metrics.get('new_model_version')}
 """
 
     hook.send(text=message)
@@ -92,17 +96,17 @@ def slack_alert(context):
     task_id = context["task_instance"].task_id
     dag_id = context["dag"].dag_id
 
-    hook.send(
-        text=f"""
-*Training Pipeline Failure*
+    message = f"""
+Training pipeline failure
 
-*DAG:* {dag_id}
-*Task:* {task_id}
+DAG: {dag_id}
+Task: {task_id}
 
-*Error:*
+Error:
 {exception}
 """
-    )
+
+    hook.send(text=message)
 
 
 @dag(
