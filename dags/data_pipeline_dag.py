@@ -14,6 +14,7 @@ from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
 from datetime import timedelta
 from pathlib import Path
+import logging
 
 from pipelines.data_pipeline.check_incoming import check_and_lock_ready
 from pipelines.data_pipeline.ingestion import ingest_incoming_files
@@ -25,11 +26,23 @@ from utils.io import load_master_dataframe
 from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.models import Variable
+from airflow.exceptions import AirflowNotFoundException
+
+
+logger = logging.getLogger(__name__)
+
+
+def _try_send_slack(text: str) -> None:
+    try:
+        hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
+        hook.send(text=text)
+    except AirflowNotFoundException as exc:
+        logger.warning("Slack connection not configured: %s", exc)
+    except Exception:
+        logger.exception("Slack webhook send failed")
 
 
 def send_success_notification(metrics: dict) -> None:
-    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
-
     message = f"""
 Data batch processed successfully
 
@@ -47,13 +60,11 @@ Durations:
 - Preprocess: {metrics['preprocess_duration']}s
 """
 
-    hook.send(text=message)
+    _try_send_slack(message)
 
 
 
 def slack_alert(context):
-    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
-
     exception = context.get("exception")
     task_id = context["task_instance"].task_id
     dag_id = context["dag"].dag_id
@@ -68,7 +79,7 @@ Error:
 {exception}
 """
 
-    hook.send(text=message)
+    _try_send_slack(message)
 
 
 DEFAULT_ARGS = {
@@ -115,23 +126,23 @@ def data_pipeline():
             **preprocess_metrics,
         }
 
-@task
-def version_master_task(metrics: dict) -> dict:
-    dvc_add_master()
-    master_df = load_master_dataframe()
-    current_master_rows = len(master_df)
-    Variable.set(
-        "CURRENT_MASTER_ROWS",
-        str(current_master_rows),
-    )
-    return {
-        **metrics,
-        "current_master_rows": current_master_rows,
-    }
+    @task
+    def version_master_task(metrics: dict) -> dict:
+        dvc_add_master()
+        master_df = load_master_dataframe()
+        current_master_rows = len(master_df)
+        Variable.set(
+            "CURRENT_MASTER_ROWS",
+            str(current_master_rows),
+        )
+        return {
+            **metrics,
+            "current_master_rows": current_master_rows,
+        }
 
     @task
-    def validate_and_clean_incoming_task(metrics: dict):
-        
+    def validate_and_clean_incoming_task(metrics: dict) -> dict:
+
         clean_incoming()
 
         processing_file = (
@@ -146,12 +157,10 @@ def version_master_task(metrics: dict) -> dict:
 
         return metrics
 
-
     @task
-    def notify_success_task(metrics: dict):
-
+    def notify_success_task(metrics: dict) -> dict:
         send_success_notification(metrics)
-
+        return metrics
 
     trigger_retrain = TriggerDagRunOperator(
         task_id="trigger_retrain_policy",
@@ -169,7 +178,10 @@ def version_master_task(metrics: dict) -> dict:
     cleaned = validate_and_clean_incoming_task(versioned_master)
     notified = notify_success_task(cleaned)
 
-    check >> ingested >> versioned_raw >> processed >> versioned_master >> cleaned >> notified >> trigger_retrain
+    check >> ingested
+    ingested >> versioned_raw >> processed >> versioned_master >> cleaned
+    cleaned >> notified
+    cleaned >> trigger_retrain
 
 
 dag = data_pipeline()

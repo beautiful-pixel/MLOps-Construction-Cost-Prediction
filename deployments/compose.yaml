@@ -3,6 +3,9 @@ x-airflow-env: &airflow-env
   AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
   AIRFLOW__CORE__LOAD_EXAMPLES: "False"
   AIRFLOW__CORE__DAGS_FOLDER: /opt/project/dags
+  # In Docker, `getfqdn()` can yield an empty/unroutable hostname; the webserver then
+  # builds served log URLs like `http://:8793/log/...`. Using the container IP fixes this.
+  AIRFLOW__CORE__HOSTNAME_CALLABLE: airflow.utils.net.get_host_ip_address
   MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
   MLFLOW_EXPERIMENT: ${MLFLOW_EXPERIMENT}
   MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
@@ -145,6 +148,7 @@ services:
       - .env
     environment:
       GATEWAY_API_URL: ${GATEWAY_API_URL:-http://gateway-api:8100}
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
       GRAFANA_URL: ${GRAFANA_URL:-http://grafana:3000}
       GRAFANA_DASHBOARD_URL: ${GRAFANA_DASHBOARD_URL:-}
       GRAFANA_ALERTS_URL: ${GRAFANA_ALERTS_URL:-}

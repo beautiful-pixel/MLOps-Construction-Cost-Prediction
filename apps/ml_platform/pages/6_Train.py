@@ -16,6 +16,41 @@ from streamlit_auth import (
 GATEWAY_API_URL = get_gateway_api_url()
 require_auth()
 
+
+# --- Airflow-like UI palette ---
+AIRFLOW_BRAND_BLUE = "#017CEE"
+AIRFLOW_STATE_COLOR = {
+        "success": "#22c55e",  # green-500
+        "failed": "#ef4444",  # red-500
+        "running": "#06b6d4",  # cyan-500
+        "queued": "#a8a29e",  # stone-400
+        "scheduled": "#a1a1aa",  # zinc-400
+        "skipped": "#f472b6",  # pink-400
+        "upstream_failed": "#f97316",  # orange-500
+        "up_for_retry": "#facc15",  # yellow-400
+        None: "#9ca3af",  # gray-400
+}
+
+st.markdown(
+        f"""
+<style>
+    div.stButton > button {{
+        background-color: {AIRFLOW_BRAND_BLUE};
+        border-color: {AIRFLOW_BRAND_BLUE};
+        color: white;
+    }}
+    div.stButton > button:hover {{
+        filter: brightness(0.95);
+        border-color: {AIRFLOW_BRAND_BLUE};
+    }}
+    div.stButton > button:focus:not(:active) {{
+        box-shadow: 0 0 0 0.2rem rgba(1, 124, 238, 0.25);
+    }}
+</style>
+""",
+        unsafe_allow_html=True,
+)
+
 DAG_ID = "train_pipeline_dag"
 
 st.title("Train Control Tower")
@@ -169,11 +204,15 @@ st.progress(progress)
 st.subheader("Training DAG View")
 
 status_color = {
-    "success": "#48bb78",
-    "failed": "#f56565",
-    "running": "#ecc94b",
-    "queued": "#a0aec0",
-    None: "#a0aec0",
+    "success": AIRFLOW_STATE_COLOR["success"],
+    "failed": AIRFLOW_STATE_COLOR["failed"],
+    "running": AIRFLOW_STATE_COLOR["running"],
+    "queued": AIRFLOW_STATE_COLOR["queued"],
+    "scheduled": AIRFLOW_STATE_COLOR["scheduled"],
+    "skipped": AIRFLOW_STATE_COLOR["skipped"],
+    "upstream_failed": AIRFLOW_STATE_COLOR["upstream_failed"],
+    "up_for_retry": AIRFLOW_STATE_COLOR["up_for_retry"],
+    None: AIRFLOW_STATE_COLOR[None],
 }
 
 dot = graphviz.Digraph()

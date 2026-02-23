@@ -20,6 +20,7 @@ from airflow.decorators import dag, task
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 from airflow.models import Variable
+from airflow.exceptions import AirflowNotFoundException
 
 from mlflow.tracking import MlflowClient
 
@@ -39,11 +40,19 @@ def get_threshold():
 
 # Slack notification
 
+
+def _try_send_slack(text: str) -> None:
+    try:
+        hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
+        hook.send(text=text)
+    except AirflowNotFoundException as exc:
+        logger.warning("Slack connection not configured: %s", exc)
+    except Exception:
+        logger.exception("Slack webhook send failed")
+
 def send_retrain_notification(decision: Dict) -> None:
-
-    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
-
     config = decision["config"]
+    threshold = decision.get("threshold")
 
     message = f"""
 Automatic retraining triggered
@@ -63,7 +72,7 @@ Threshold: {threshold}
 Training pipeline launched.
 """
 
-    hook.send(text=message)
+    _try_send_slack(message)
 
 
 @dag(
@@ -131,10 +140,7 @@ def retrain_policy():
                 last_run.data.metrics.get("master_rows")
             )
 
-        current_master_rows = airflow_service.get_variable(
-            "CURRENT_MASTER_ROWS"
-        )
-        current_master_rows = int(current_master_rows) if current_master_rows else 0
+        current_master_rows = int(Variable.get("CURRENT_MASTER_ROWS", default_var="0"))
 
         new_rows = current_master_rows - last_master_rows
 

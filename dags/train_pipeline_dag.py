@@ -19,6 +19,7 @@ import pendulum
 from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
 from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+from airflow.exceptions import AirflowNotFoundException
 
 from pipelines.train_pipeline.split import run_split_pipeline
 from pipelines.train_pipeline.train import train_model
@@ -47,11 +48,19 @@ from utils.mlflow_config import configure_mlflow
 logger = logging.getLogger(__name__)
 
 
+def _try_send_slack(text: str) -> None:
+    try:
+        hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
+        hook.send(text=text)
+    except AirflowNotFoundException as exc:
+        logger.warning("Slack connection not configured: %s", exc)
+    except Exception:
+        logger.exception("Slack webhook send failed")
+
+
 # Slack success
 
 def send_success_notification(metrics: dict) -> None:
-    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
-
     message = f"""
 Training pipeline completed successfully
 
@@ -83,15 +92,12 @@ Promotion:
 - New model version: {metrics.get('new_model_version')}
 """
 
-    hook.send(text=message)
+    _try_send_slack(message)
 
 
 # Slack failure
 
 def slack_alert(context):
-
-    hook = SlackWebhookHook(slack_webhook_conn_id="slack_webhook")
-
     exception = context.get("exception")
     task_id = context["task_instance"].task_id
     dag_id = context["dag"].dag_id
@@ -106,7 +112,7 @@ Error:
 {exception}
 """
 
-    hook.send(text=message)
+    _try_send_slack(message)
 
 
 @dag(

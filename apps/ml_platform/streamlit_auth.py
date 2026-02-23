@@ -25,11 +25,13 @@ def _init_state() -> None:
         st.session_state.auth_token = None
     if "auth_username" not in st.session_state:
         st.session_state.auth_username = None
+    if "skip_cookie_restore" not in st.session_state:
+        st.session_state.skip_cookie_restore = False
     if "auth_password_input" not in st.session_state:
         st.session_state.auth_password_input = ""
     if "clear_password_next" not in st.session_state:
         st.session_state.clear_password_next = False
-    if not st.session_state.auth_token:
+    if (not st.session_state.auth_token) and (not st.session_state.skip_cookie_restore):
         _restore_auth_cookie()
 
 
@@ -70,7 +72,8 @@ def _set_auth_cookie(token: str, username: str | None) -> None:
 def _clear_auth_cookie() -> None:
     script = f"""
     <script>
-    document.cookie = '{AUTH_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax';
+    // Clear by both Max-Age and Expires for broader browser behavior.
+    document.cookie = '{AUTH_COOKIE_NAME}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     </script>
     """
     components.html(script, height=0)
@@ -146,6 +149,10 @@ def login_sidebar() -> None:
             if st.button("Logout"):
                 st.session_state.auth_token = None
                 st.session_state.auth_username = None
+                # Streamlit's st.context.cookies can reflect cookies captured at
+                # connection time. Without this guard, a rerun may immediately
+                # restore the old cookie and log the user back in.
+                st.session_state.skip_cookie_restore = True
                 _clear_auth_cookie()
                 st.rerun()
         else:
@@ -175,6 +182,7 @@ def login_sidebar() -> None:
                 if token:
                     st.session_state.auth_token = token
                     st.session_state.auth_username = username
+                    st.session_state.skip_cookie_restore = False
                     st.session_state.clear_password_next = True
                     _set_auth_cookie(token, username)
                     st.success("Login successful.")
