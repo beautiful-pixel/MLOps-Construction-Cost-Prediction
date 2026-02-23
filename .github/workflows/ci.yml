@@ -28,7 +28,21 @@ jobs:
 
       - name: Load environment variables from .env.test
         run: |
-          cat .env.test >> $GITHUB_ENV
+          sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' .env.test >> "$GITHUB_ENV"
+
+      - name: Debug loaded env vars (safe)
+        run: |
+          echo "Loaded env vars from .env.test:"
+          while IFS= read -r line; do
+            key="${line%%=*}"
+            [ -z "$key" ] && continue
+            val="${!key}"
+            if [[ "$key" =~ (SECRET|PASSWORD|TOKEN|KEY|WEBHOOK) ]]; then
+              echo "${key}=***"
+            else
+              echo "${key}=${val}"
+            fi
+          done < <(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' .env.test)
 
       - name: Run unit tests
         run: |
@@ -65,17 +79,35 @@ jobs:
 
       - name: Load environment variables from .env.test
         run: |
-          cat .env.test >> $GITHUB_ENV
+          sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' .env.test >> "$GITHUB_ENV"
+
+      - name: Debug loaded env vars (safe)
+        run: |
+          echo "Loaded env vars from .env.test:"
+          while IFS= read -r line; do
+            key="${line%%=*}"
+            [ -z "$key" ] && continue
+            val="${!key}"
+            if [[ "$key" =~ (SECRET|PASSWORD|TOKEN|KEY|WEBHOOK) ]]; then
+              echo "${key}=***"
+            else
+              echo "${key}=${val}"
+            fi
+          done < <(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' .env.test)
+
+      - name: Prepare Docker env file
+        run: |
+          cp deployments/.env.example deployments/.env
 
       - name: Start Docker services
         run: |
-          docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml up -d postgres gateway-api inference-api
+          docker compose --env-file deployments/.env -f deployments/compose.yaml -f deployments/compose.dev.yaml up -d postgres gateway-api inference-api
           echo "Waiting for services to be ready..."
           sleep 40
 
       - name: Check service health
         run: |
-          docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml ps
+          docker compose --env-file deployments/.env -f deployments/compose.yaml -f deployments/compose.dev.yaml ps
 
       - name: Run integration tests
         run: |
@@ -84,7 +116,7 @@ jobs:
       - name: Stop Docker services
         if: always()
         run: |
-          docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml down
+          docker compose --env-file deployments/.env -f deployments/compose.yaml -f deployments/compose.dev.yaml down
 
       - name: Slack notification
         if: ${{ always() && env.SLACK_WEBHOOK_URL }}
