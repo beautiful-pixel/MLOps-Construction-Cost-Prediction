@@ -49,7 +49,9 @@ jobs:
           pytest -v tests/unit/
 
       - name: Slack notification
-        if: ${{ always() && env.SLACK_WEBHOOK_URL }}
+        if: ${{ always() && secrets.SLACK_WEBHOOK_URL != '' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           STATUS="${{ job.status }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -119,7 +121,9 @@ jobs:
           docker compose --env-file deployments/.env -f deployments/compose.yaml -f deployments/compose.dev.yaml down
 
       - name: Slack notification
-        if: ${{ always() && env.SLACK_WEBHOOK_URL }}
+        if: ${{ always() && secrets.SLACK_WEBHOOK_URL != '' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           STATUS="${{ job.status }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
