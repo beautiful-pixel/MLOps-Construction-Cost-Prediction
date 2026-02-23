@@ -28,7 +28,7 @@ jobs:
 
       - name: Load environment variables from .env.test
         run: |
-          sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' .env.test >> "$GITHUB_ENV"
+          sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' -e '/^SLACK_WEBHOOK_URL=/d' .env.test >> "$GITHUB_ENV"
 
       - name: Debug loaded env vars (safe)
         run: |
@@ -49,9 +49,7 @@ jobs:
           pytest -v tests/unit/
 
       - name: Slack notification
-        if: ${{ always() && secrets.SLACK_WEBHOOK_URL != '' }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: ${{ always() && env.SLACK_WEBHOOK_URL != '' }}
         run: |
           STATUS="${{ job.status }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -81,7 +79,7 @@ jobs:
 
       - name: Load environment variables from .env.test
         run: |
-          sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' .env.test >> "$GITHUB_ENV"
+          sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' -e '/^SLACK_WEBHOOK_URL=/d' .env.test >> "$GITHUB_ENV"
 
       - name: Debug loaded env vars (safe)
         run: |
@@ -121,9 +119,7 @@ jobs:
           docker compose --env-file deployments/.env -f deployments/compose.yaml -f deployments/compose.dev.yaml down
 
       - name: Slack notification
-        if: ${{ always() && secrets.SLACK_WEBHOOK_URL != '' }}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: ${{ always() && env.SLACK_WEBHOOK_URL != '' }}
         run: |
           STATUS="${{ job.status }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
