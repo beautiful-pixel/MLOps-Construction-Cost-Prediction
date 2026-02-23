@@ -8,10 +8,16 @@ import shutil
 from unittest.mock import MagicMock
 
 import pytest
+from dotenv import load_dotenv
 from passlib.context import CryptContext
 from jose import jwt
 from fastapi.testclient import TestClient
 import responses
+
+# Load test environment variables from .env.test
+env_test_path = Path(__file__).parent.parent / ".env.test"
+if env_test_path.exists():
+    load_dotenv(env_test_path, override=True)
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "api" / "gateway_api"))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))

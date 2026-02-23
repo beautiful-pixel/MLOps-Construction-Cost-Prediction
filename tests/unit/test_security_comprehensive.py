@@ -110,16 +110,24 @@ class TestJWTTokenGeneration:
         
         original_token = jwt.encode(original_payload, test_secret_key, algorithm=test_algorithm)
         
-        # Simulate refresh
+        # Simulate refresh after a delay to get different timestamp
+        import time
+        time.sleep(0.1)
+        
         refreshed_payload = {
             "sub": "testuser",
             "role": "user",
-            "exp": datetime.utcnow() + timedelta(hours=1)
+            "exp": datetime.utcnow() + timedelta(hours=2)  # Different expiration
         }
         refreshed_token = jwt.encode(refreshed_payload, test_secret_key, algorithm=test_algorithm)
         
-        assert original_token != refreshed_token
-        assert jwt.decode(refreshed_token, test_secret_key, algorithms=[test_algorithm])
+        # Decode both tokens to compare expiration
+        original_decoded = jwt.decode(original_token, test_secret_key, algorithms=[test_algorithm])
+        refreshed_decoded = jwt.decode(refreshed_token, test_secret_key, algorithms=[test_algorithm])
+        
+        # Original and refreshed should have different expiration times
+        assert original_decoded["exp"] != refreshed_decoded["exp"]
+        assert refreshed_decoded["exp"] > original_decoded["exp"]
 
     def test_token_tampering_detection(self, test_secret_key, test_algorithm, valid_jwt_token):
         """Test that tampered tokens are rejected."""

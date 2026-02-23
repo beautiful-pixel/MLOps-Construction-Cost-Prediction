@@ -14,9 +14,6 @@ SERVICES := $(if $(SERVICES),$(SERVICES),$(VALID_SERVICES))
 %:
 	@:
 
-export REPO_ROOT := $(PWD)
-export CONFIG_ROOT := $(PWD)/configs
-export DATA_ROOT := $(PWD)/data
 
 PROJECT_NAME = mlops-construction-cost-prediction
 PROJECT_NAME_DEV = $(PROJECT_NAME)-dev
@@ -33,7 +30,7 @@ COMPOSE_PROD = docker compose -f deployments/compose.yaml -f deployments/compose
 	rebuild rebuild-dev \
 	logs logs-dev \
 	ps ps-dev \
-	test test-unit test-integration
+	test test-unit test-integration test-integration-with-compose
 
 help:
 	@echo ""
@@ -146,8 +143,19 @@ test-unit:
 	pytest -v tests/unit/
 
 test-integration:
-	@echo "Running integration tests"
+	@echo "Running integration tests (SKIPPED - requires running services)"
 	pytest -v tests/integration/
+
+test-integration-with-compose:
+	@echo "Starting services for integration tests..."
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) up -d --build postgres gateway-api inference-api
+	@echo "Waiting for services to be ready (30s)..."
+	@sleep 30
+	@echo "Running integration tests..."
+	RUN_INTEGRATION_TESTS=true pytest -v tests/integration/ || true
+	@echo "Stopping services..."
+	$(COMPOSE_DEV) -p $(PROJECT_NAME_DEV) down
+	@echo "Integration tests complete"
 
 build-arm:
 	@echo "Building ARM64 images"

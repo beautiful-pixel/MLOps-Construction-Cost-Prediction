@@ -4,12 +4,18 @@ Integration tests for Dataset management endpoints.
 New endpoints added for dataset oversight and retrain threshold management.
 """
 import sys
+import os
 from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "api" / "gateway_api"))
+
+# Skip integration tests by default unless explicitly enabled
+# Set RUN_INTEGRATION_TESTS=true to run (automatically set in CI)
+if not os.getenv("RUN_INTEGRATION_TESTS", "").lower() == "true":
+    pytestmark = pytest.mark.skip(reason="Integration tests require a running server. Run with RUN_INTEGRATION_TESTS=true")
 
 
 @pytest.fixture

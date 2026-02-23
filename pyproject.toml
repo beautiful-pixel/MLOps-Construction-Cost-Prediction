@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=45", "wheel"]
+requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -48,8 +48,27 @@ airflow = [
 ]
 
 dev = [
-    "pytest",
-    "pytest-cov",
+    # Testing framework
+    "pytest>=7.0.0,<8.0",
+    "pytest-cov>=4.0.0,<5.0",
+    "pytest-asyncio>=0.21.0,<1.0",
+    "pytest-mock>=3.10.0,<4.0",
+    "pytest-timeout>=2.1.0,<3.0",
+    "pytest-xdist>=3.0.0,<4.0",
+    
+    # Mocking & fixtures
+    "responses>=0.22.0,<1.0",
+    "requests-mock>=1.10.0,<2.0",
+    "faker>=18.0.0,<20.0",
+    "factory-boy>=3.2.0,<4.0",
+    
+    # Data testing
+    "hypothesis>=6.70.0,<7.0",
+    
+    # Integration testing
+    "testcontainers>=3.7.0,<4.0",
+    
+    # Core dependencies
     "joblib>=1.5.3,<2.0",
     "dvc>=3.66.1,<4.0",
     "rasterio>=1.4.4,<2.0",
@@ -60,6 +79,11 @@ dev = [
     "httpx>=0.27.0,<1.0",
     "psycopg2-binary>=2.9.9,<3.0",
     "python-multipart",
+    
+    # Streamlit & UI testing
+    "streamlit>=1.32.0,<2.0",
+    "graphviz>=0.21,<1.0",
+    "plotly>=6.5.0,<7.0",
 ]
 
 lint = [
@@ -74,3 +98,40 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=src --cov-report=html --cov-report=term-missing --strict-markers"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests",
+    "slow: Slow tests",
+    "asyncio: Tests with async functions",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "setup.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

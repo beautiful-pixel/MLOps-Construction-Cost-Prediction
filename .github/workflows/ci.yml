@@ -7,7 +7,7 @@ on:
     branches: [ main, dev ]
 
 jobs:
-  test:
+  test-unit:
     runs-on: ubuntu-latest
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -26,19 +26,71 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run tests
+      - name: Load environment variables from .env.test
         run: |
-          pytest
-        env:
-          REPO_ROOT: ${{ github.workspace }}
-          CONFIG_ROOT: ${{ github.workspace }}/configs
-          DATA_ROOT: ${{ github.workspace }}/data
+          cat .env.test >> $GITHUB_ENV
 
-      - name: Slack
+      - name: Run unit tests
+        run: |
+          pytest -v tests/unit/
+
+      - name: Slack notification
         if: ${{ always() && env.SLACK_WEBHOOK_URL }}
         run: |
           STATUS="${{ job.status }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\"Workflow *${{ github.workflow }}* (${STATUS})\nRepo: ${{ github.repository }}\nRun: ${RUN_URL}\"}" \
+            --data "{\"text\":\"Workflow Unit Tests *${{ github.workflow }}* (${STATUS})\nRepo: ${{ github.repository }}\nRun: ${RUN_URL}\"}" \
+            "${SLACK_WEBHOOK_URL}"
+
+  test-integration:
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      RUN_INTEGRATION_TESTS: "true"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Load environment variables from .env.test
+        run: |
+          cat .env.test >> $GITHUB_ENV
+
+      - name: Start Docker services
+        run: |
+          docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml up -d postgres gateway-api inference-api
+          echo "Waiting for services to be ready..."
+          sleep 40
+
+      - name: Check service health
+        run: |
+          docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml ps
+
+      - name: Run integration tests
+        run: |
+          pytest -v tests/integration/
+
+      - name: Stop Docker services
+        if: always()
+        run: |
+          docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml down
+
+      - name: Slack notification
+        if: ${{ always() && env.SLACK_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ job.status }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"Workflow Integration Tests *${{ github.workflow }}* (${STATUS})\nRepo: ${{ github.repository }}\nRun: ${RUN_URL}\"}" \
             "${SLACK_WEBHOOK_URL}"
