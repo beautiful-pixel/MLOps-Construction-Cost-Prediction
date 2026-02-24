@@ -1,305 +1,310 @@
 """
 Tests for Streamlit ML platform pages.
 
-Tests for new pages:
-- 5_Train.py (Train Control Tower)
-- 7_Datasets.py (Data & Retrain Policy Control Tower)
+Validates page source code structure and shared utilities
+(streamlit_auth module) by reading actual source files
+and testing utility functions directly.
+
+Note: Streamlit pages run as top-level scripts and are hard
+to import directly. We test:
+1. Source file structure (DAG IDs, API endpoints, required sections)
+2. streamlit_auth utility functions (cookie encoding, auth headers)
 """
 import sys
+import os
 from pathlib import Path
 import pytest
+import json
+import base64
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "apps" / "ml_platform"))
 
-
-class TestTrainControlTowerPage:
-    """Test Train Control Tower page (5_Train.py)."""
-
-    def test_page_title(self):
-        """Test page has correct title."""
-        page_title = "Train Control Tower"
-        assert page_title == "Train Control Tower"
-
-    def test_train_trigger_section_exists(self):
-        """Test that train trigger section exists."""
-        page_sections = [
-            "Trigger Training",
-            "Training DAG View",
-        ]
-        
-        assert "Trigger Training" in page_sections
-
-    def test_feature_schema_selection(self):
-        """Test feature schema version selection."""
-        available_features = [1, 2]
-        default_feature = 1
-        
-        assert default_feature in available_features
-
-    def test_model_schema_selection(self):
-        """Test model schema version selection."""
-        available_models = [1, 2]
-        default_model = 1
-        
-        assert default_model in available_models
-
-    def test_split_version_input(self):
-        """Test split version input."""
-        split_version = 1
-        min_split = 1
-        
-        assert split_version >= min_split
-
-    def test_training_config_payload(self):
-        """Test training trigger payload creation."""
-        config = {
-            "feature_version": 1,
-            "model_version": 1,
-            "split_version": 1,
-        }
-        
-        assert "feature_version" in config
-        assert "model_version" in config
-        assert "split_version" in config
-
-    def test_dag_runs_display(self):
-        """Test DAG runs table display."""
-        dag_runs = [
-            {"dag_run_id": "run_001", "start_date": "2026-02-22", "state": "success"},
-            {"dag_run_id": "run_002", "start_date": "2026-02-21", "state": "running"},
-        ]
-        
-        assert len(dag_runs) == 2
-        assert dag_runs[0]["state"] == "success"
-
-    def test_task_instances_kpis(self):
-        """Test task instance KPIs."""
-        tasks = [
-            {"task_id": "split", "state": "success"},
-            {"task_id": "train", "state": "success"},
-            {"task_id": "evaluate", "state": "running"},
-        ]
-        
-        total_tasks = len(tasks)
-        success_tasks = sum(1 for t in tasks if t["state"] == "success")
-        running_tasks = sum(1 for t in tasks if t["state"] == "running")
-        
-        assert total_tasks == 3
-        assert success_tasks == 2
-        assert running_tasks == 1
-
-    def test_dag_visualization(self):
-        """Test DAG visualization with task states."""
-        status_colors = {
-            "success": "#48bb78",
-            "failed": "#f56565",
-            "running": "#ecc94b",
-        }
-        
-        assert "success" in status_colors
-        assert status_colors["success"] == "#48bb78"
-
-    def test_auto_refresh_toggle(self):
-        """Test auto-refresh toggle."""
-        auto_refresh_enabled = False
-        refresh_interval_seconds = 5
-        
-        assert isinstance(auto_refresh_enabled, bool)
-        assert refresh_interval_seconds == 5
+PAGES_DIR = Path(__file__).parent.parent.parent / "apps" / "ml_platform" / "pages"
 
 
-class TestDatasetControlTowerPage:
-    """Test Data & Retrain Policy Control Tower page (7_Datasets.py)."""
+# ---------------------------------------------------------------------------
+# Source code structural validation
+# ---------------------------------------------------------------------------
 
-    def test_page_title(self):
-        """Test page has correct title."""
-        page_title = "Data & Retrain Policy Control Tower"
-        assert page_title == "Data & Retrain Policy Control Tower"
+class TestTrainPageStructure:
+    """Validate 6_Train.py source structure against requirements."""
 
-    def test_dataset_overview_section(self):
-        """Test dataset overview section."""
-        overview = {
-            "master_rows": 1000,
-            "new_rows": 50,
-            "threshold": 10,
-            "should_retrain": True,
-        }
-        
-        assert overview["master_rows"] == 1000
-        assert overview["should_retrain"] is True
+    @pytest.fixture(autouse=True)
+    def load_source(self):
+        self.source = (PAGES_DIR / "6_Train.py").read_text(encoding="utf-8")
 
-    def test_master_rows_metric(self):
-        """Test master rows KPI metric."""
-        master_rows = 1000
-        assert master_rows > 0
+    def test_page_imports_streamlit_auth(self):
+        """Train page must use streamlit_auth for authentication."""
+        assert "from streamlit_auth import" in self.source
 
-    def test_new_rows_metric(self):
-        """Test new rows metric."""
-        new_rows = 50
-        assert new_rows >= 0
+    def test_page_calls_require_auth(self):
+        """Train page must enforce authentication."""
+        assert "require_auth()" in self.source
 
-    def test_retrain_threshold_metric(self):
-        """Test retrain threshold metric."""
-        threshold = 10
-        assert threshold > 0
+    def test_page_has_correct_title(self):
+        """Train page must set the correct title."""
+        assert 'st.title("Train Control Tower")' in self.source
 
-    def test_retrain_indicator(self):
-        """Test retrain required indicator."""
-        new_rows = 15
-        threshold = 10
-        should_retrain = new_rows > threshold
-        
-        assert should_retrain is True
+    def test_page_uses_train_pipeline_dag(self):
+        """Train page must reference the correct DAG ID."""
+        assert '"train_pipeline_dag"' in self.source
 
-    def test_threshold_update_input(self):
-        """Test threshold update number input."""
-        current_threshold = 10
-        min_threshold = 1
-        
-        assert current_threshold >= min_threshold
+    def test_page_has_feature_schema_selector(self):
+        """Train page must have feature schema version selector."""
+        assert "feature-schemas" in self.source
+        assert "feature_version" in self.source
 
-    def test_threshold_update_button(self):
-        """Test threshold update button functionality."""
-        new_threshold = 50
-        
-        # Button should accept new value
-        assert new_threshold > 0
+    def test_page_has_model_schema_selector(self):
+        """Train page must have model schema version selector."""
+        assert "model-schemas" in self.source
+        assert "model_version" in self.source
 
-    def test_global_orchestration_diagram(self):
-        """Test global orchestration DAG diagram."""
-        dag_nodes = ["data", "policy", "train"]
-        
-        assert "data" in dag_nodes
-        assert "policy" in dag_nodes
-        assert "train" in dag_nodes
+    def test_page_has_split_version_input(self):
+        """Train page must have split version input."""
+        assert "split_version" in self.source
+        assert "st.number_input" in self.source
 
-    def test_data_pipeline_dag_render(self):
-        """Test data pipeline DAG rendering."""
-        dag_id = "data_pipeline_dag"
-        assert dag_id == "data_pipeline_dag"
+    def test_page_has_trigger_button(self):
+        """Train page must have a trigger training button."""
+        assert "Trigger Training" in self.source
+        assert "/pipeline/trigger" in self.source
 
-    def test_retrain_policy_dag_render(self):
-        """Test retrain policy DAG rendering."""
-        dag_id = "retrain_policy_dag"
-        assert dag_id == "retrain_policy_dag"
+    def test_page_displays_dag_runs(self):
+        """Train page must fetch and display DAG runs."""
+        assert "dag_runs" in self.source
 
-    def test_dag_run_selection(self):
-        """Test DAG run selection."""
-        runs = [
-            {"dag_run_id": "run_001", "start_date": "2026-02-22"},
-            {"dag_run_id": "run_002", "start_date": "2026-02-21"},
-        ]
-        
-        assert len(runs) == 2
-        assert runs[0]["dag_run_id"] == "run_001"
+    def test_page_shows_task_kpis(self):
+        """Train page must show task success/running/failed KPIs."""
+        assert 'state"] == "success"' in self.source or "success" in self.source
+        assert "running" in self.source
+        assert "failed" in self.source
 
-    def test_task_visualization(self):
-        """Test task instance visualization."""
-        tasks = [
-            {"task_id": "check_ready", "state": "success"},
-            {"task_id": "ingest", "state": "success"},
-            {"task_id": "preprocess", "state": "running"},
-        ]
-        
-        total_tasks = len(tasks)
-        progress = 2 / 3  # 2 out of 3 finished
-        
-        assert progress > 0.5
+    def test_page_has_dag_visualization(self):
+        """Train page must render a graphviz DAG chart."""
+        assert "graphviz" in self.source
+        assert "st.graphviz_chart" in self.source
 
-    def test_task_state_colors(self):
-        """Test task state color mapping."""
-        status_colors = {
-            "success": "#48bb78",
-            "failed": "#f56565",
-            "running": "#ecc94b",
-            "queued": "#a0aec0",
-            "skipped": "#63b3ed",
-        }
-        
-        assert status_colors["success"] == "#48bb78"
-        assert status_colors["running"] == "#ecc94b"
+    def test_page_has_auto_refresh(self):
+        """Train page must have auto-refresh toggle."""
+        assert "auto_refresh" in self.source or "Auto refresh" in self.source
 
-    def test_auto_refresh_toggle(self):
-        """Test auto-refresh toggle."""
-        auto_refresh_enabled = False
-        refresh_interval_seconds = 5
-        
-        assert isinstance(auto_refresh_enabled, bool)
-        assert refresh_interval_seconds == 5
+    def test_page_uses_status_colors(self):
+        """Train page must define status-to-color mapping."""
+        assert "#48bb78" in self.source  # success green
+        assert "#f56565" in self.source  # failed red
+        assert "#ecc94b" in self.source  # running yellow
+
+    def test_page_sends_conf_with_trigger(self):
+        """Train page must send config (feature/model/split versions) when triggering."""
+        assert '"feature_version"' in self.source
+        assert '"model_version"' in self.source
+        assert '"split_version"' in self.source
 
 
-class TestStreamlitPageIntegration:
-    """Test integration between pages."""
+class TestDatasetPageStructure:
+    """Validate 3_Datasets.py source structure against requirements."""
 
-    def test_both_pages_use_same_api(self):
-        """Test that both pages use same gateway API."""
-        gateway_api_endpoints = {
-            "configs/feature-schemas": "GET",
-            "configs/model-schemas": "GET",
-            "pipeline/trigger": "POST",
-            "pipeline/dags/{dag_id}/runs": "GET",
-            "datasets/overview": "GET",
-            "datasets/threshold": "POST",
-        }
-        
-        # Both pages should use these endpoints
-        assert "pipeline/trigger" in gateway_api_endpoints
-        assert "datasets/overview" in gateway_api_endpoints
+    @pytest.fixture(autouse=True)
+    def load_source(self):
+        self.source = (PAGES_DIR / "3_Datasets.py").read_text(encoding="utf-8")
 
-    def test_authentication_flow_consistency(self):
-        """Test authentication flow is consistent."""
-        auth_requirements = {
-            "pages": ["require_auth()"],
-            "headers": ["auth_headers()"],
-        }
-        
-        assert "require_auth()" in auth_requirements["pages"]
+    def test_page_imports_streamlit_auth(self):
+        """Dataset page must use streamlit_auth for authentication."""
+        assert "from streamlit_auth import" in self.source
 
-    def test_error_handling_consistency(self):
-        """Test error handling patterns are consistent."""
-        error_checks = [
-            "response.status_code == 200",
-            "assert_response_ok()",
-        ]
-        
-        assert len(error_checks) == 2
+    def test_page_calls_require_auth(self):
+        """Dataset page must enforce authentication."""
+        assert "require_auth()" in self.source
+
+    def test_page_has_correct_title(self):
+        """Dataset page must set the correct title."""
+        assert "Data & Retrain Policy Control Tower" in self.source
+
+    def test_page_references_both_dags(self):
+        """Dataset page must reference both data_pipeline and retrain_policy DAGs."""
+        assert '"data_pipeline_dag"' in self.source
+        assert '"retrain_policy_dag"' in self.source
+
+    def test_page_fetches_dataset_overview(self):
+        """Dataset page must fetch dataset overview from API."""
+        assert "/datasets/overview" in self.source
+
+    def test_page_shows_master_rows_metric(self):
+        """Dataset page must display master rows count."""
+        assert "master_rows" in self.source
+
+    def test_page_shows_new_rows_metric(self):
+        """Dataset page must display new rows count."""
+        assert "new_rows" in self.source
+
+    def test_page_shows_threshold_metric(self):
+        """Dataset page must display retrain threshold."""
+        assert "threshold" in self.source
+
+    def test_page_shows_retrain_indicator(self):
+        """Dataset page must display retrain-required indicator."""
+        assert "should_retrain" in self.source
+
+    def test_page_has_threshold_update(self):
+        """Dataset page must support updating the threshold."""
+        assert "/datasets/threshold" in self.source
+        assert "Update Threshold" in self.source
+
+    def test_page_has_global_orchestration_diagram(self):
+        """Dataset page must show global DAG orchestration."""
+        assert "Global Orchestration" in self.source
+        assert "Data Pipeline" in self.source
+        assert "Retrain Policy" in self.source
+        assert "Train Pipeline" in self.source
+
+    def test_page_has_dag_visualization(self):
+        """Dataset page must render graphviz charts."""
+        assert "graphviz" in self.source
+        assert "st.graphviz_chart" in self.source
+
+    def test_page_has_auto_refresh(self):
+        """Dataset page must have auto-refresh toggle."""
+        assert "auto_refresh" in self.source or "Auto refresh" in self.source
+
+    def test_page_uses_status_colors(self):
+        """Dataset page must define status-to-color mapping."""
+        assert "#48bb78" in self.source  # success
+        assert "#f56565" in self.source  # failed
+        assert "#ecc94b" in self.source  # running
 
 
-class TestPageFeatureCompleteness:
-    """Test that pages have all required features."""
+# ---------------------------------------------------------------------------
+# streamlit_auth utility function tests
+# ---------------------------------------------------------------------------
 
-    def test_train_page_completeness(self):
-        """Test Train page has all required components."""
-        components = {
-            "title": "Train Control Tower",
-            "feature_selector": True,
-            "model_selector": True,
-            "split_selector": True,
-            "trigger_button": True,
-            "dag_visualization": True,
-            "task_table": True,
-            "kpi_metrics": True,
-        }
-        
-        required_components = ["title", "feature_selector", "model_selector", "trigger_button"]
-        for component in required_components:
-            assert component in components
-            assert components[component]
+class TestStreamlitAuthCookieEncoding:
+    """Test cookie encoding/decoding functions from streamlit_auth."""
 
-    def test_dataset_page_completeness(self):
-        """Test Dataset page has all required components."""
-        components = {
-            "title": "Data & Retrain Policy Control Tower",
-            "overview": True,
-            "threshold_editor": True,
-            "global_orchestration": True,
-            "data_pipeline_section": True,
-            "retrain_policy_section": True,
-            "task_visualization": True,
-        }
-        
-        required_components = ["title", "overview", "threshold_editor", "global_orchestration"]
-        for component in required_components:
-            assert component in components
-            assert components[component]
+    def test_encode_cookie_payload(self):
+        """Test cookie payload encoding produces valid base64."""
+        from streamlit_auth import _encode_cookie_payload
+
+        result = _encode_cookie_payload("test_token_123", "admin")
+        # Should be valid base64
+        decoded_bytes = base64.urlsafe_b64decode(result.encode("utf-8"))
+        payload = json.loads(decoded_bytes)
+        assert payload["token"] == "test_token_123"
+        assert payload["username"] == "admin"
+
+    def test_decode_cookie_payload_roundtrip(self):
+        """Test encode -> decode produces original values."""
+        from streamlit_auth import _encode_cookie_payload, _decode_cookie_payload
+
+        encoded = _encode_cookie_payload("my_token", "my_user")
+        decoded = _decode_cookie_payload(encoded)
+
+        assert decoded is not None
+        assert decoded["token"] == "my_token"
+        assert decoded["username"] == "my_user"
+
+    def test_decode_invalid_cookie_returns_none(self):
+        """Test decoding invalid data returns None."""
+        from streamlit_auth import _decode_cookie_payload
+
+        assert _decode_cookie_payload("not_valid_base64!!!") is None
+
+    def test_decode_empty_token_returns_none(self):
+        """Test cookie with empty token returns None."""
+        from streamlit_auth import _decode_cookie_payload
+
+        # Create a cookie with empty token
+        payload = json.dumps({"token": "", "username": "user"}).encode("utf-8")
+        encoded = base64.urlsafe_b64encode(payload).decode("utf-8")
+        assert _decode_cookie_payload(encoded) is None
+
+    def test_encode_handles_none_username(self):
+        """Test encoding with None username."""
+        from streamlit_auth import _encode_cookie_payload, _decode_cookie_payload
+
+        encoded = _encode_cookie_payload("token123", None)
+        decoded = _decode_cookie_payload(encoded)
+        assert decoded["token"] == "token123"
+        assert decoded["username"] == ""
+
+
+class TestAssertResponseOk:
+    """Test the assert_response_ok utility."""
+
+    @patch("streamlit_auth.st")
+    def test_401_stops_with_auth_error(self, mock_st):
+        """Test 401 response triggers auth error message."""
+        from streamlit_auth import assert_response_ok
+
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+
+        mock_st.stop.side_effect = SystemExit
+        with pytest.raises(SystemExit):
+            assert_response_ok(mock_response)
+
+        mock_st.error.assert_called_once()
+
+    @patch("streamlit_auth.st")
+    def test_403_admin_shows_admin_message(self, mock_st):
+        """Test 403 with admin_only shows admin-specific message."""
+        from streamlit_auth import assert_response_ok
+
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+
+        mock_st.stop.side_effect = SystemExit
+        with pytest.raises(SystemExit):
+            assert_response_ok(mock_response, admin_only=True)
+
+        error_msg = mock_st.error.call_args[0][0]
+        assert "Admin" in error_msg or "admin" in error_msg
+
+    @patch("streamlit_auth.st")
+    def test_200_does_not_stop(self, mock_st):
+        """Test 200 response passes without error."""
+        from streamlit_auth import assert_response_ok
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        assert_response_ok(mock_response)
+        mock_st.stop.assert_not_called()
+
+
+class TestPageConsistency:
+    """Cross-page consistency checks."""
+
+    def test_both_pages_use_auth_headers(self):
+        """Both pages must use auth_headers() for API calls."""
+        train_src = (PAGES_DIR / "6_Train.py").read_text(encoding="utf-8")
+        dataset_src = (PAGES_DIR / "3_Datasets.py").read_text(encoding="utf-8")
+
+        assert "auth_headers()" in train_src
+        assert "auth_headers()" in dataset_src
+
+    def test_both_pages_use_assert_response_ok(self):
+        """Both pages must validate API responses."""
+        train_src = (PAGES_DIR / "6_Train.py").read_text(encoding="utf-8")
+        dataset_src = (PAGES_DIR / "3_Datasets.py").read_text(encoding="utf-8")
+
+        assert "assert_response_ok" in train_src
+        assert "assert_response_ok" in dataset_src
+
+    def test_both_pages_use_same_gateway_url(self):
+        """Both pages must use get_gateway_api_url()."""
+        train_src = (PAGES_DIR / "6_Train.py").read_text(encoding="utf-8")
+        dataset_src = (PAGES_DIR / "3_Datasets.py").read_text(encoding="utf-8")
+
+        assert "get_gateway_api_url()" in train_src
+        assert "get_gateway_api_url()" in dataset_src
+
+    def test_both_pages_consistent_status_colors(self):
+        """Both pages must use same status color mapping."""
+        train_src = (PAGES_DIR / "6_Train.py").read_text(encoding="utf-8")
+        dataset_src = (PAGES_DIR / "3_Datasets.py").read_text(encoding="utf-8")
+
+        # Both should define the same success/failed/running colors
+        for color in ["#48bb78", "#f56565", "#ecc94b"]:
+            assert color in train_src
+            assert color in dataset_src

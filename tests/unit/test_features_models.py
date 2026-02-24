@@ -47,7 +47,7 @@ class TestFeatureImputation:
         })
         
         median_value = df["value"].median()
-        df["value"].fillna(median_value, inplace=True)
+        df["value"] = df["value"].fillna(median_value)
         
         assert df["value"].isna().sum() == 0
         assert median_value in df["value"].values
@@ -59,7 +59,7 @@ class TestFeatureImputation:
         })
         
         mean_value = df["value"].mean()
-        df["value"].fillna(mean_value, inplace=True)
+        df["value"] = df["value"].fillna(mean_value)
         
         assert df["value"].isna().sum() == 0
 
@@ -70,7 +70,7 @@ class TestFeatureImputation:
         })
         
         most_frequent = df["category"].mode()[0]
-        df["category"].fillna(most_frequent, inplace=True)
+        df["category"] = df["category"].fillna(most_frequent)
         
         assert df["category"].isna().sum() == 0
         assert most_frequent == "A"
@@ -81,7 +81,7 @@ class TestFeatureImputation:
             "value": [10, None, None, 40, 50],
         })
         
-        df["value"].fillna(method="ffill", inplace=True)
+        df["value"] = df["value"].ffill()
         
         assert df["value"].isna().sum() == 0
 
@@ -95,8 +95,8 @@ class TestFeatureImputation:
         original_int_dtype = df["int_col"].dtype
         original_float_dtype = df["float_col"].dtype
         
-        df["int_col"].fillna(df["int_col"].median(), inplace=True)
-        df["float_col"].fillna(df["float_col"].mean(), inplace=True)
+        df["int_col"] = df["int_col"].fillna(df["int_col"].median())
+        df["float_col"] = df["float_col"].fillna(df["float_col"].mean())
         
         assert df["int_col"].isna().sum() == 0
         assert df["float_col"].isna().sum() == 0

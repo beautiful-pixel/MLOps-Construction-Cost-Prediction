@@ -1,9 +1,11 @@
 """
 Unit tests for feature schema versioning and validation.
 
-Tests for feature schemas v1 and v2 configurations.
+Tests load ACTUAL feature schema YAML files and validate their structure,
+content, and cross-version consistency.
 """
 import sys
+import os
 from pathlib import Path
 import pytest
 import pandas as pd
@@ -11,365 +13,286 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
+# Point CONFIG_ROOT to actual configs directory
+CONFIGS_DIR = str(Path(__file__).parent.parent.parent / "configs")
+
+
+@pytest.fixture(autouse=True)
+def set_config_root(monkeypatch):
+    """Ensure CONFIG_ROOT points to the project configs directory."""
+    monkeypatch.setenv("CONFIG_ROOT", CONFIGS_DIR)
+
+
+@pytest.fixture
+def schema_v1():
+    from features.feature_schema import load_feature_schema
+    return load_feature_schema(1)
+
+
+@pytest.fixture
+def schema_v2():
+    from features.feature_schema import load_feature_schema
+    return load_feature_schema(2)
+
 
 class TestFeatureSchemaV1:
-    """Test feature schema version 1."""
+    """Test feature schema version 1 loaded from actual YAML."""
 
-    def test_v1_has_correct_version(self):
+    def test_v1_has_correct_version(self, schema_v1):
         """Test that v1 schema has version 1."""
-        schema_v1 = {
-            "version": 1,
-            "data_contract": 1,
-            "tabular_features": {}
-        }
-        
         assert schema_v1["version"] == 1
+
+    def test_v1_references_data_contract_v1(self, schema_v1):
+        """Test that v1 schema references data contract v1."""
         assert schema_v1["data_contract"] == 1
 
-    def test_v1_feature_list(self):
-        """Test v1 contains expected features."""
-        v1_features = {
-            "deflated_gdp_usd": {"type": "numeric", "impute": "median"},
-            "straight_distance_to_capital_km": {"type": "numeric", "impute": "median", "clip": [0, 5000]},
-            "developed_country": {"type": "categorical", "encoding": "binary", "impute": "most_frequent"},
-            "access_to_highway": {"type": "categorical", "encoding": "binary", "impute": "most_frequent"},
-            "region_economic_classification": {
-                "type": "categorical",
-                "encoding": "ordinal",
-                "order": ["Low income", "Lower-middle income", "Upper-middle income", "High income"],
-                "impute": "most_frequent"
-            },
-            "seismic_hazard_zone": {
-                "type": "categorical",
-                "encoding": "ordinal",
-                "order": ["Very Low", "Low", "Moderate", "High", "Very High"],
-                "impute": "most_frequent"
-            },
-        }
-        
-        assert len(v1_features) == 6
-        assert "deflated_gdp_usd" in v1_features
-        assert "access_to_highway" in v1_features
+    def test_v1_has_tabular_features(self, schema_v1):
+        """Test v1 contains tabular_features key."""
+        assert "tabular_features" in schema_v1
+        assert len(schema_v1["tabular_features"]) > 0
 
-    def test_v1_numeric_features(self):
-        """Test numeric features in v1."""
-        numeric_features = {
-            "deflated_gdp_usd": {"type": "numeric", "impute": "median"},
-            "straight_distance_to_capital_km": {"type": "numeric", "impute": "median", "clip": [0, 5000]},
+    def test_v1_feature_list(self, schema_v1):
+        """Test v1 contains the expected 6 features."""
+        features = set(schema_v1["tabular_features"].keys())
+        expected = {
+            "deflated_gdp_usd",
+            "straight_distance_to_capital_km",
+            "developed_country",
+            "access_to_highway",
+            "region_economic_classification",
+            "seismic_hazard_zone",
         }
-        
-        for feature_name, config in numeric_features.items():
-            assert config["type"] == "numeric"
-            assert "impute" in config
+        assert features == expected
 
-    def test_v1_categorical_features(self):
-        """Test categorical features in v1."""
-        categorical_features = {
-            "developed_country": {"type": "categorical", "encoding": "binary"},
-            "access_to_highway": {"type": "categorical", "encoding": "binary"},
-            "region_economic_classification": {"type": "categorical", "encoding": "ordinal"},
-            "seismic_hazard_zone": {"type": "categorical", "encoding": "ordinal"},
-        }
-        
-        for feature_name, config in categorical_features.items():
-            assert config["type"] == "categorical"
-            assert "encoding" in config
+    def test_v1_numeric_features_have_correct_type(self, schema_v1):
+        """Test numeric features have type='numeric'."""
+        numeric_features = ["deflated_gdp_usd", "straight_distance_to_capital_km"]
+        for feat in numeric_features:
+            assert schema_v1["tabular_features"][feat]["type"] == "numeric"
 
-    def test_v1_ordinal_encoding_order(self):
-        """Test ordinal encoding has correct order in v1."""
-        region_order = ["Low income", "Lower-middle income", "Upper-middle income", "High income"]
-        seismic_order = ["Very Low", "Low", "Moderate", "High", "Very High"]
-        
-        assert len(region_order) == 4
-        assert len(seismic_order) == 5
-        assert region_order[0] == "Low income"
-        assert seismic_order[-1] == "Very High"
+    def test_v1_categorical_features_have_encoding(self, schema_v1):
+        """Test categorical features define an encoding strategy."""
+        categorical = ["developed_country", "access_to_highway",
+                       "region_economic_classification", "seismic_hazard_zone"]
+        for feat in categorical:
+            cfg = schema_v1["tabular_features"][feat]
+            assert cfg["type"] == "categorical"
+            assert "encoding" in cfg
 
-    def test_v1_clipping_constraint(self):
-        """Test clipping constraint in v1."""
-        distance_config = {
-            "type": "numeric",
-            "impute": "median",
-            "clip": [0, 5000]
-        }
-        
-        assert distance_config["clip"] == [0, 5000]
-        assert distance_config["clip"][0] == 0
-        assert distance_config["clip"][1] == 5000
+    def test_v1_ordinal_features_have_order(self, schema_v1):
+        """Test ordinal features define an order list."""
+        ordinal_features = ["region_economic_classification", "seismic_hazard_zone"]
+        for feat in ordinal_features:
+            cfg = schema_v1["tabular_features"][feat]
+            assert cfg["encoding"] == "ordinal"
+            assert "order" in cfg
+            assert isinstance(cfg["order"], list)
+            assert len(cfg["order"]) > 1
+
+    def test_v1_region_uses_ordinal(self, schema_v1):
+        """Test v1 uses ordinal encoding for region_economic_classification."""
+        assert schema_v1["tabular_features"]["region_economic_classification"]["encoding"] == "ordinal"
+
+    def test_v1_clipping_constraint_on_distance(self, schema_v1):
+        """Test clipping constraint on straight_distance_to_capital_km."""
+        cfg = schema_v1["tabular_features"]["straight_distance_to_capital_km"]
+        assert "clip" in cfg
+        assert cfg["clip"][0] == 0
+        assert cfg["clip"][1] == 5000
+
+    def test_v1_all_features_have_impute(self, schema_v1):
+        """Test all v1 features define an imputation strategy."""
+        for feat, cfg in schema_v1["tabular_features"].items():
+            assert "impute" in cfg, f"Feature '{feat}' missing 'impute'"
 
 
 class TestFeatureSchemaV2:
-    """Test feature schema version 2."""
+    """Test feature schema version 2 loaded from actual YAML."""
 
-    def test_v2_has_correct_version(self):
+    def test_v2_has_correct_version(self, schema_v2):
         """Test that v2 schema has version 2."""
-        schema_v2 = {
-            "version": 2,
-            "data_contract": 1,
-            "tabular_features": {}
-        }
-        
         assert schema_v2["version"] == 2
+
+    def test_v2_references_data_contract_v1(self, schema_v2):
+        """Test v2 still references data contract v1."""
         assert schema_v2["data_contract"] == 1
 
-    def test_v2_feature_list(self):
-        """Test v2 contains expected features."""
-        v2_features = {
-            "access_to_highway": {"type": "categorical", "encoding": "binary", "impute": "most_frequent"},
-            "deflated_gdp_usd": {"type": "numeric", "impute": "median"},
-            "developed_country": {"type": "categorical", "encoding": "binary", "impute": "most_frequent"},
-            "region_economic_classification": {
-                "type": "categorical",
-                "encoding": "onehot",
-                "impute": "most_frequent",
-                "order": ["Low income", "Lower-middle income", "Upper-middle income", "High income"]
-            },
-            "seismic_hazard_zone": {
-                "type": "categorical",
-                "encoding": "ordinal",
-                "impute": "most_frequent",
-                "order": ["Very Low", "Low", "Moderate", "High", "Very High"]
-            },
-            "straight_distance_to_capital_km": {
-                "type": "numeric",
-                "impute": "median",
-                "clip": [0, 5000]
-            },
-        }
-        
-        assert len(v2_features) == 6
-        assert "deflated_gdp_usd" in v2_features
+    def test_v2_has_same_feature_count_as_v1(self, schema_v1, schema_v2):
+        """Test v2 has same number of tabular features as v1."""
+        v1_count = len(schema_v1["tabular_features"])
+        v2_count = len(schema_v2["tabular_features"])
+        assert v1_count == v2_count
 
-    def test_v2_vs_v1_feature_differences(self):
-        """Test what changed between v1 and v2."""
-        # V2 changes
-        # - region_economic_classification encoding changed from ordinal to onehot
-        # - impute field added to seismic_hazard_zone
-        # - impute field added to region_economic_classification
-        
-        v2_region_encoding = "onehot"  # Changed from ordinal in v1
-        v1_region_encoding = "ordinal"
-        
-        assert v2_region_encoding != v1_region_encoding
+    def test_v2_region_encoding_is_onehot(self, schema_v2):
+        """Test that v2 uses onehot encoding for region_economic_classification."""
+        assert schema_v2["tabular_features"]["region_economic_classification"]["encoding"] == "onehot"
 
-    def test_v2_region_encoding_is_onehot(self):
-        """Test that region in v2 uses onehot encoding."""
-        region_config_v2 = {
-            "type": "categorical",
-            "encoding": "onehot",
-            "impute": "most_frequent",
-        }
-        
-        assert region_config_v2["encoding"] == "onehot"
+    def test_v2_seismic_still_ordinal(self, schema_v2):
+        """Test seismic_hazard_zone stays ordinal in v2."""
+        assert schema_v2["tabular_features"]["seismic_hazard_zone"]["encoding"] == "ordinal"
 
-    def test_v2_seismic_has_impute(self):
-        """Test that seismic in v2 has impute strategy."""
-        seismic_config_v2 = {
-            "type": "categorical",
-            "encoding": "ordinal",
-            "impute": "most_frequent",
-        }
-        
-        assert "impute" in seismic_config_v2
-        assert seismic_config_v2["impute"] == "most_frequent"
+    def test_v2_all_features_have_impute(self, schema_v2):
+        """Test all v2 features define an imputation strategy."""
+        for feat, cfg in schema_v2["tabular_features"].items():
+            assert "impute" in cfg, f"Feature '{feat}' missing 'impute'"
 
 
 class TestFeatureSchemaComparison:
-    """Test comparison between v1 and v2."""
+    """Test comparison between v1 and v2 using actual loaded schemas."""
 
-    def test_v1_v2_same_base_features(self):
-        """Test v1 and v2 have same base feature set."""
-        v1_features = {
-            "deflated_gdp_usd",
-            "straight_distance_to_capital_km",
-            "developed_country",
-            "access_to_highway",
-            "region_economic_classification",
-            "seismic_hazard_zone",
-        }
-        
-        v2_features = {
-            "deflated_gdp_usd",
-            "straight_distance_to_capital_km",
-            "developed_country",
-            "access_to_highway",
-            "region_economic_classification",
-            "seismic_hazard_zone",
-        }
-        
+    def test_v1_v2_same_feature_set(self, schema_v1, schema_v2):
+        """Test v1 and v2 share exactly the same feature names."""
+        v1_features = set(schema_v1["tabular_features"].keys())
+        v2_features = set(schema_v2["tabular_features"].keys())
         assert v1_features == v2_features
 
-    def test_v1_has_more_features_than_latest_versions(self):
-        """Test original v1/v2 had more features before cleanup."""
-        # Original schemas had features like:
-        # - us_cpi
-        # - landlocked
-        # - access_to_railway
-        # - access_to_port
-        # - access_to_airport
-        # - flood_risk_class
-        
-        removed_features = {
-            "us_cpi",
-            "landlocked",
-            "access_to_railway",
-            "access_to_port",
-            "access_to_airport",
-            "flood_risk_class",
-        }
-        
-        assert len(removed_features) == 6
+    def test_v1_v2_encoding_difference_only_in_region(self, schema_v1, schema_v2):
+        """Test that v1 and v2 differ only in region_economic_classification encoding."""
+        differences = []
+        for feat in schema_v1["tabular_features"]:
+            v1_enc = schema_v1["tabular_features"][feat].get("encoding")
+            v2_enc = schema_v2["tabular_features"][feat].get("encoding")
+            if v1_enc != v2_enc:
+                differences.append(feat)
 
-    def test_v1_v2_encoding_strategies(self):
-        """Test encoding strategies used in v1 vs v2."""
-        v1_encodings = {
-            "developed_country": "binary",
-            "access_to_highway": "binary",
-            "region_economic_classification": "ordinal",
-            "seismic_hazard_zone": "ordinal",
-        }
-        
-        v2_encodings = {
-            "developed_country": "binary",
-            "access_to_highway": "binary",
-            "region_economic_classification": "onehot",  # Changed!
-            "seismic_hazard_zone": "ordinal",
-        }
-        
-        # Count differences
-        differences = sum(1 for k in v1_encodings if v1_encodings[k] != v2_encodings[k])
-        assert differences == 1  # Only region changed
+        assert differences == ["region_economic_classification"]
+
+    def test_v1_v2_same_data_contract(self, schema_v1, schema_v2):
+        """Test both versions reference the same data contract."""
+        assert schema_v1["data_contract"] == schema_v2["data_contract"]
 
 
 class TestFeatureSchemaValidation:
-    """Test feature schema validation."""
+    """Test feature schema validation using actual project functions."""
 
-    def test_validate_schema_structure(self):
-        """Test validation of schema structure."""
+    def test_validate_schema_structure_requires_keys(self):
+        """Test that schema validation rejects missing required keys."""
+        from features.feature_schema import validate_feature_schema_definition
+
+        incomplete_schema = {"version": 1}
+
+        with pytest.raises(ValueError, match="Missing required keys"):
+            validate_feature_schema_definition(incomplete_schema)
+
+    def test_validate_rejects_unknown_feature_type(self):
+        """Test validation rejects invalid feature types."""
+        from features.feature_schema import validate_feature_schema_definition
+
         schema = {
-            "version": 1,
+            "version": 99,
             "data_contract": 1,
             "tabular_features": {
-                "feature1": {"type": "numeric"}
-            }
+                "deflated_gdp_usd": {
+                    "type": "unknown_type",
+                    "impute": "median",
+                }
+            },
         }
-        
-        # Required fields
-        assert "version" in schema
-        assert "data_contract" in schema
-        assert "tabular_features" in schema
 
-    def test_validate_feature_types(self):
-        """Test validation of feature types."""
-        valid_types = {"numeric", "categorical"}
-        
-        feature_configs = [
-            {"type": "numeric"},
-            {"type": "categorical"},
-        ]
-        
-        for config in feature_configs:
-            assert config["type"] in valid_types
+        with pytest.raises(ValueError, match="invalid type"):
+            validate_feature_schema_definition(schema)
 
-    def test_validate_encoding_strategies(self):
-        """Test validation of encoding strategies."""
-        valid_encodings = {"binary", "ordinal", "onehot"}
-        
-        encodings_in_schemas = ["binary", "ordinal", "onehot"]
-        
-        for encoding in encodings_in_schemas:
-            assert encoding in valid_encodings
+    def test_validate_rejects_ordinal_without_order(self):
+        """Test validation rejects ordinal encoding without order list."""
+        from features.feature_schema import validate_feature_schema_definition
 
-    def test_validate_imputation_strategies(self):
-        """Test validation of imputation strategies."""
-        valid_imputers = {"median", "mean", "most_frequent", "constant"}
-        
-        imputers_in_schemas = ["median", "most_frequent"]
-        
-        for imputer in imputers_in_schemas:
-            assert imputer in valid_imputers
-
-    def test_validate_ordinal_order_field(self):
-        """Test validation of ordinal feature order field."""
-        ordinal_feature = {
-            "type": "categorical",
-            "encoding": "ordinal",
-            "order": ["Low", "Medium", "High"]
+        schema = {
+            "version": 99,
+            "data_contract": 1,
+            "tabular_features": {
+                "region_economic_classification": {
+                    "type": "categorical",
+                    "encoding": "ordinal",
+                    "impute": "most_frequent",
+                    # missing 'order'
+                }
+            },
         }
-        
-        # Ordinal encoding requires order
-        if ordinal_feature["encoding"] == "ordinal":
-            assert "order" in ordinal_feature
-            assert len(ordinal_feature["order"]) > 0
 
-    def test_validate_clipping_constraints(self):
-        """Test validation of clipping constraints."""
-        clipped_feature = {
-            "type": "numeric",
-            "clip": [0, 5000]
+        with pytest.raises(ValueError, match="must define 'order'"):
+            validate_feature_schema_definition(schema)
+
+    def test_validate_rejects_categorical_without_encoding(self):
+        """Test validation rejects categorical features without encoding."""
+        from features.feature_schema import validate_feature_schema_definition
+
+        schema = {
+            "version": 99,
+            "data_contract": 1,
+            "tabular_features": {
+                "developed_country": {
+                    "type": "categorical",
+                    "impute": "most_frequent",
+                    # missing 'encoding'
+                }
+            },
         }
-        
-        # Clip should be [min, max]
-        assert len(clipped_feature["clip"]) == 2
-        assert clipped_feature["clip"][0] < clipped_feature["clip"][1]
 
-    def test_reject_invalid_version(self):
-        """Test rejection of invalid schema version."""
-        invalid_versions = [0, -1, "1.5", None]
-        valid_versions = [1, 2, 3]
-        
-        for version in invalid_versions:
-            assert version not in valid_versions
+        with pytest.raises(ValueError, match="invalid encoding"):
+            validate_feature_schema_definition(schema)
 
+    def test_validate_rejects_target_in_schema(self):
+        """Test validation rejects target column in feature schema."""
+        from features.feature_schema import validate_feature_schema_definition
 
-class TestFeatureSchemaBackwardCompatibility:
-    """Test backward compatibility between versions."""
-
-    def test_v1_compatible_with_v2(self):
-        """Test that models trained on v1 can understand v2 features."""
-        v1_feature_set = {
-            "deflated_gdp_usd",
-            "straight_distance_to_capital_km",
-            "developed_country",
-            "access_to_highway",
-            "region_economic_classification",
-            "seismic_hazard_zone",
+        schema = {
+            "version": 99,
+            "data_contract": 1,
+            "tabular_features": {
+                "deflated_gdp_usd": {"type": "numeric", "impute": "median"},
+            },
+            "target": "construction_cost_per_m2_usd",
         }
-        
-        v2_feature_set = {
-            "deflated_gdp_usd",
-            "straight_distance_to_capital_km",
-            "developed_country",
-            "access_to_highway",
-            "region_economic_classification",
-            "seismic_hazard_zone",
+
+        with pytest.raises(ValueError, match="must not define 'target'"):
+            validate_feature_schema_definition(schema)
+
+    def test_validate_rejects_empty_features(self):
+        """Test validation rejects schema with no features."""
+        from features.feature_schema import validate_feature_schema_definition
+
+        schema = {
+            "version": 99,
+            "data_contract": 1,
+            "tabular_features": {},
         }
-        
-        # Same features = backward compatible
-        assert v1_feature_set == v2_feature_set
 
-    def test_v2_preprocessing_compatible_with_v1_model(self):
-        """Test that v2 preprocessing works with v1-trained model."""
-        # V1 model expects:
-        # - region_economic_classification as ordinal (0-3)
-        
-        # V2 preprocessing produces:
-        # - region_economic_classification as onehot (4 columns)
-        
-        # This is breaking! Would need special handling
-        v1_input_cols = 1  # Ordinal value
-        v2_output_cols = 4  # Onehot columns
-        
-        # Not backward compatible for region feature
-        assert v1_input_cols != v2_output_cols
+        with pytest.raises(ValueError, match="at least one tabular feature"):
+            validate_feature_schema_definition(schema)
 
-    def test_inference_requires_matching_schema(self):
-        """Test that inference requires matching feature schema version."""
-        # A model trained on v1 must be used with v1 features
-        # Cannot mix v1 model with v2 features (different preprocessing)
-        
-        model_schema_version = 1
-        feature_schema_version = 1
-        
-        # Should match
-        assert model_schema_version == feature_schema_version
+
+class TestFeatureSchemaFunctions:
+    """Test feature_schema module utility functions."""
+
+    def test_get_allowed_feature_versions(self):
+        """Test listing available feature versions."""
+        from features.feature_schema import get_allowed_feature_versions
+
+        versions = get_allowed_feature_versions()
+        assert isinstance(versions, list)
+        assert 1 in versions
+        assert 2 in versions
+
+    def test_get_feature_columns_returns_list(self, schema_v1):
+        """Test get_feature_columns returns feature names as list."""
+        from features.feature_schema import get_feature_columns
+
+        cols = get_feature_columns(schema_v1)
+        assert isinstance(cols, list)
+        assert len(cols) == 6
+        assert "deflated_gdp_usd" in cols
+
+    def test_get_feature_versions_for_contract(self):
+        """Test filtering feature versions by contract version."""
+        from features.feature_schema import get_feature_versions_for_contract
+
+        versions = get_feature_versions_for_contract(1)
+        assert 1 in versions
+        assert 2 in versions
+
+    def test_load_nonexistent_version_raises(self):
+        """Test loading nonexistent version raises error."""
+        from features.feature_schema import load_feature_schema
+
+        with pytest.raises(ValueError, match="Unknown version"):
+            load_feature_schema(9999)
