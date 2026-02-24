@@ -1,5 +1,7 @@
 """
 Comprehensive security and authentication tests.
+
+Tests the ACTUAL security functions from api/gateway_api/services/security.py.
 """
 import sys
 from pathlib import Path
@@ -7,309 +9,270 @@ import pytest
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
+from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "api" / "gateway_api"))
 
 
 class TestPasswordHashing:
-    """Test password hashing and verification."""
+    """Test password hashing using the project's security module."""
 
-    def test_verify_password_with_correct_password(self, hashed_password, test_user_credentials):
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        result = pwd_context.verify(test_user_credentials["password"], hashed_password)
-        assert result is True
+    def test_verify_password_correct(self):
+        """Test verify_password returns True for correct password."""
+        from services.security import pwd_context, verify_password
 
-    def test_verify_password_with_incorrect_password(self, hashed_password):
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        result = pwd_context.verify("wrongpassword", hashed_password)
-        assert result is False
+        hashed = pwd_context.hash("testpassword")
+        assert verify_password("testpassword", hashed) is True
 
-    def test_password_hash_consistency(self, test_user_credentials):
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        password = test_user_credentials["password"]
-        
-        hash1 = pwd_context.hash(password)
-        hash2 = pwd_context.hash(password)
-        
+    def test_verify_password_incorrect(self):
+        """Test verify_password returns False for wrong password."""
+        from services.security import pwd_context, verify_password
+
+        hashed = pwd_context.hash("testpassword")
+        assert verify_password("wrongpassword", hashed) is False
+
+    def test_password_hash_uses_bcrypt(self):
+        """Test that password hashing uses bcrypt scheme."""
+        from services.security import pwd_context
+
+        hashed = pwd_context.hash("test")
+        # bcrypt hashes start with $2b$
+        assert hashed.startswith("$2b$")
+
+    def test_same_password_produces_different_hashes(self):
+        """Test bcrypt salting produces unique hashes."""
+        from services.security import pwd_context
+
+        hash1 = pwd_context.hash("samepassword")
+        hash2 = pwd_context.hash("samepassword")
         assert hash1 != hash2
-        assert pwd_context.verify(password, hash1)
-        assert pwd_context.verify(password, hash2)
-
-    def test_password_hashing_performance(self, test_user_credentials):
-        """Ensure password hashing takes reasonable time (bcrypt should be slow)."""
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        password = test_user_credentials["password"]
-        
-        import time
-        start = time.time()
-        pwd_context.hash(password)
-        elapsed = time.time() - start
-        
-        # bcrypt should take at least 100ms (slow by design for security)
-        assert elapsed > 0.1
-
-    def test_empty_password_hashing(self):
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        empty_hash = pwd_context.hash("")
-        assert pwd_context.verify("", empty_hash)
+        assert pwd_context.verify("samepassword", hash1)
+        assert pwd_context.verify("samepassword", hash2)
 
 
 class TestJWTTokenGeneration:
-    """Test JWT token creation and validation."""
+    """Test JWT token creation using the project's create_access_token."""
 
-    def test_create_token_payload(self, test_secret_key, test_algorithm, test_user_credentials):
-        payload = {
-            "sub": test_user_credentials["username"],
-            "role": test_user_credentials["role"]
-        }
-        
-        token = jwt.encode(payload, test_secret_key, algorithm=test_algorithm)
+    def test_create_access_token_returns_string(self):
+        """Test create_access_token returns a JWT string."""
+        from services.security import create_access_token
+
+        token = create_access_token({"sub": "testuser", "role": "user"})
         assert isinstance(token, str)
-        assert len(token) > 0
+        assert len(token.split(".")) == 3  # JWT has 3 parts
 
-    def test_decode_valid_token(self, valid_jwt_token, test_secret_key, test_algorithm):
-        payload = jwt.decode(valid_jwt_token, test_secret_key, algorithms=[test_algorithm])
-        
-        assert payload["sub"] == "testuser"
-        assert payload["role"] == "user"
-        assert "exp" in payload
+    def test_token_contains_subject_claim(self):
+        """Test token contains the 'sub' claim."""
+        from services.security import create_access_token
+        from core.config import SECRET_KEY, ALGORITHM
 
-    def test_decode_expired_token_raises_error(self, expired_jwt_token, test_secret_key, test_algorithm):
-        with pytest.raises(JWTError):
-            jwt.decode(expired_jwt_token, test_secret_key, algorithms=[test_algorithm])
+        token = create_access_token({"sub": "testuser", "role": "user"})
+        decoded = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        assert decoded["sub"] == "testuser"
 
-    def test_decode_token_with_wrong_secret_raises_error(self, valid_jwt_token, test_algorithm):
-        wrong_secret = "wrong-secret-key"
-        
-        with pytest.raises(JWTError):
-            jwt.decode(valid_jwt_token, wrong_secret, algorithms=[test_algorithm])
+    def test_token_contains_role_claim(self):
+        """Test token contains the 'role' claim."""
+        from services.security import create_access_token
+        from core.config import SECRET_KEY, ALGORITHM
 
-    def test_token_contains_expiration(self, test_secret_key, test_algorithm):
-        from datetime import datetime, timedelta
-        
-        exp_time = datetime.utcnow() + timedelta(minutes=60)
-        payload = {
-            "sub": "testuser",
-            "role": "user",
-            "exp": exp_time
-        }
-        
-        token = jwt.encode(payload, test_secret_key, algorithm=test_algorithm)
-        decoded = jwt.decode(token, test_secret_key, algorithms=[test_algorithm])
-        
+        token = create_access_token({"sub": "admin_user", "role": "admin"})
+        decoded = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        assert decoded["role"] == "admin"
+
+    def test_token_has_expiration(self):
+        """Test token has an expiration time in the future."""
+        from services.security import create_access_token
+        from core.config import SECRET_KEY, ALGORITHM
+
+        token = create_access_token({"sub": "user", "role": "user"})
+        decoded = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
         assert "exp" in decoded
         assert decoded["exp"] > datetime.utcnow().timestamp()
 
-    def test_token_refresh_validity(self, test_secret_key, test_algorithm):
-        """Test that refreshed tokens have new expiration."""
-        original_payload = {
-            "sub": "testuser",
-            "role": "user",
-            "exp": datetime.utcnow() + timedelta(hours=1)
-        }
-        
-        original_token = jwt.encode(original_payload, test_secret_key, algorithm=test_algorithm)
-        
-        # Simulate refresh after a delay to get different timestamp
-        import time
-        time.sleep(0.1)
-        
-        refreshed_payload = {
-            "sub": "testuser",
-            "role": "user",
-            "exp": datetime.utcnow() + timedelta(hours=2)  # Different expiration
-        }
-        refreshed_token = jwt.encode(refreshed_payload, test_secret_key, algorithm=test_algorithm)
-        
-        # Decode both tokens to compare expiration
-        original_decoded = jwt.decode(original_token, test_secret_key, algorithms=[test_algorithm])
-        refreshed_decoded = jwt.decode(refreshed_token, test_secret_key, algorithms=[test_algorithm])
-        
-        # Original and refreshed should have different expiration times
-        assert original_decoded["exp"] != refreshed_decoded["exp"]
-        assert refreshed_decoded["exp"] > original_decoded["exp"]
+    def test_token_expiration_uses_configured_minutes(self):
+        """Test token expiration matches ACCESS_TOKEN_EXPIRE_MINUTES."""
+        from services.security import create_access_token
+        from core.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
-    def test_token_tampering_detection(self, test_secret_key, test_algorithm, valid_jwt_token):
+        before = datetime.utcnow()
+        token = create_access_token({"sub": "user", "role": "user"})
+        after = datetime.utcnow()
+
+        decoded = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        exp_time = datetime.utcfromtimestamp(decoded["exp"])
+
+        # Token should expire approximately ACCESS_TOKEN_EXPIRE_MINUTES from now
+        expected_min = before + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES) - timedelta(seconds=2)
+        expected_max = after + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES) + timedelta(seconds=2)
+        assert expected_min <= exp_time <= expected_max
+
+    def test_token_tampering_detected(self):
         """Test that tampered tokens are rejected."""
-        # Split token and modify payload
-        parts = valid_jwt_token.split(".")
-        tampered_token = parts[0] + "." + parts[1] + ".tampered_signature"
-        
+        from services.security import create_access_token
+        from core.config import SECRET_KEY, ALGORITHM
+
+        token = create_access_token({"sub": "user", "role": "user"})
+        parts = token.split(".")
+        tampered = parts[0] + "." + parts[1] + ".tampered_signature"
+
         with pytest.raises(JWTError):
-            jwt.decode(tampered_token, test_secret_key, algorithms=[test_algorithm])
+            jwt.decode(tampered, SECRET_KEY, algorithms=[ALGORITHM])
 
-    def test_admin_role_in_token(self, test_secret_key, test_algorithm):
-        """Test admin role is correctly encoded in token."""
-        payload = {
-            "sub": "admin_user",
-            "role": "admin",
-            "exp": datetime.utcnow() + timedelta(hours=1)
-        }
-        
-        token = jwt.encode(payload, test_secret_key, algorithm=test_algorithm)
-        decoded = jwt.decode(token, test_secret_key, algorithms=[test_algorithm])
-        
-        assert decoded["role"] == "admin"
+    def test_token_with_wrong_secret_rejected(self):
+        """Test token decoded with wrong secret raises error."""
+        from services.security import create_access_token
 
-    def test_user_role_in_token(self, test_secret_key, test_algorithm):
-        """Test user role is correctly encoded in token."""
-        payload = {
-            "sub": "regular_user",
-            "role": "user",
-            "exp": datetime.utcnow() + timedelta(hours=1)
-        }
-        
-        token = jwt.encode(payload, test_secret_key, algorithm=test_algorithm)
-        decoded = jwt.decode(token, test_secret_key, algorithms=[test_algorithm])
-        
-        assert decoded["role"] == "user"
+        token = create_access_token({"sub": "user", "role": "user"})
+
+        with pytest.raises(JWTError):
+            jwt.decode(token, "wrong-secret-key", algorithms=["HS256"])
 
 
-class TestCredentialValidation:
-    """Test credential validation rules."""
+class TestAuthenticateUser:
+    """Test the authenticate_user function against fake_users_db."""
 
-    def test_username_empty_validation(self):
-        assert "" != "validuser"
+    @patch.dict("os.environ", {}, clear=False)
+    def test_authenticate_valid_admin(self):
+        """Test authenticating with valid admin credentials."""
+        from services.security import authenticate_user
 
-    def test_password_empty_validation(self):
-        assert "" != "validpass"
+        # Clear DB env vars to force fake_users_db
+        with patch("services.security._db_configured", return_value=False):
+            user = authenticate_user("admin", "admin")
+            assert user is not None
+            assert user["username"] == "admin"
+            assert user["role"] == "admin"
 
-    def test_username_length_validation(self):
-        username = "a" * 256
-        assert len(username) > 255
+    @patch.dict("os.environ", {}, clear=False)
+    def test_authenticate_valid_user(self):
+        """Test authenticating with valid user credentials."""
+        from services.security import authenticate_user
 
-    def test_role_valid_values(self):
-        valid_roles = {"user", "admin"}
-        assert "user" in valid_roles
-        assert "admin" in valid_roles
-        assert "superuser" not in valid_roles
+        with patch("services.security._db_configured", return_value=False):
+            user = authenticate_user("user", "user")
+            assert user is not None
+            assert user["username"] == "user"
+            assert user["role"] == "user"
 
-    def test_token_structure(self, valid_jwt_token):
-        parts = valid_jwt_token.split(".")
-        assert len(parts) == 3  # JWT has 3 parts
+    @patch.dict("os.environ", {}, clear=False)
+    def test_authenticate_wrong_password_returns_none(self):
+        """Test authenticating with wrong password returns None."""
+        from services.security import authenticate_user
 
-    def test_username_special_characters(self):
-        """Test username validation with special characters."""
-        usernames = [
-            "user@example.com",
-            "user_name",
-            "user-name",
-            "user.name",
-        ]
-        for username in usernames:
-            assert len(username) > 0
+        with patch("services.security._db_configured", return_value=False):
+            user = authenticate_user("admin", "wrongpassword")
+            assert user is None
 
-    def test_password_min_length(self):
-        """Test password minimum length requirement."""
-        short_password = "abc"
-        acceptable_password = "abcdefghij"
-        
-        assert len(short_password) < 8
-        assert len(acceptable_password) >= 8
+    @patch.dict("os.environ", {}, clear=False)
+    def test_authenticate_nonexistent_user_returns_none(self):
+        """Test authenticating nonexistent user returns None."""
+        from services.security import authenticate_user
 
-    def test_credentials_immutability_in_token(self, test_secret_key, test_algorithm):
-        """Test that token claims cannot be modified after signing."""
-        payload = {
-            "sub": "testuser",
-            "role": "user",
-            "exp": datetime.utcnow() + timedelta(hours=1)
-        }
-        
-        token = jwt.encode(payload, test_secret_key, algorithm=test_algorithm)
-        
-        # Try to decode and verify original data
-        decoded = jwt.decode(token, test_secret_key, algorithms=[test_algorithm])
-        assert decoded["sub"] == "testuser"
-        assert decoded["role"] == "user"
+        with patch("services.security._db_configured", return_value=False):
+            user = authenticate_user("nonexistent", "password")
+            assert user is None
 
 
-class TestBruteForceProtection:
-    """Test brute force attack prevention."""
+class TestGetCurrentUser:
+    """Test the get_current_user token decoding function."""
 
-    def test_login_attempt_tracking(self):
-        """Test that failed login attempts are tracked."""
-        failed_attempts = {}
-        username = "testuser"
-        
-        # Simulate failed attempts
-        for i in range(3):
-            if username not in failed_attempts:
-                failed_attempts[username] = 0
-            failed_attempts[username] += 1
-        
-        assert failed_attempts[username] == 3
+    def test_valid_token_returns_user_dict(self):
+        """Test valid token is decoded to user dict."""
+        from services.security import create_access_token, get_current_user
 
-    def test_account_lockout_threshold(self):
-        """Test account lockout after X failed attempts."""
-        max_attempts = 5
-        failed_attempts = 4
-        
-        should_lockout = failed_attempts >= max_attempts
-        assert should_lockout is False
-        
-        failed_attempts += 1
-        should_lockout = failed_attempts >= max_attempts
-        assert should_lockout is True
+        token = create_access_token({"sub": "testuser", "role": "user"})
+        user = get_current_user(token)
 
-    def test_failed_attempt_reset_after_success(self):
-        """Test that failed attempts reset after successful login."""
-        failed_attempts = {"testuser": 3}
-        
-        # Simulate successful login
-        if "testuser" in failed_attempts:
-            del failed_attempts["testuser"]
-        
-        assert "testuser" not in failed_attempts
+        assert user["username"] == "testuser"
+        assert user["role"] == "user"
 
+    def test_expired_token_raises_401(self):
+        """Test expired token raises HTTPException."""
+        from services.security import get_current_user
+        from core.config import SECRET_KEY, ALGORITHM
+        from fastapi import HTTPException
 
-class TestTokenExpiration:
-    """Test token expiration and session management."""
-
-    def test_token_expiration_time(self, test_secret_key, test_algorithm):
-        """Test that token expiration time is correctly set."""
-        exp_time = datetime.utcnow() + timedelta(hours=1)
         payload = {
             "sub": "testuser",
-            "exp": exp_time
+            "role": "user",
+            "exp": datetime.utcnow() - timedelta(hours=1),
         }
-        
-        token = jwt.encode(payload, test_secret_key, algorithm=test_algorithm)
-        decoded = jwt.decode(token, test_secret_key, algorithms=[test_algorithm])
-        
-        # Check expiration is in the future
-        assert decoded["exp"] > datetime.utcnow().timestamp()
+        expired_token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-    def test_token_expiration_cleanup(self):
-        """Test cleanup of expired tokens."""
-        expired_tokens = {}
-        current_time = datetime.utcnow()
-        
-        # Add some tokens with expiration
-        expired_tokens["token1"] = current_time - timedelta(hours=1)
-        expired_tokens["token2"] = current_time + timedelta(hours=1)
-        
-        # Clean expired tokens
-        active_tokens = {
-            k: v for k, v in expired_tokens.items() 
-            if v > current_time
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user(expired_token)
+        assert exc_info.value.status_code == 401
+
+    def test_invalid_token_raises_401(self):
+        """Test invalid token raises HTTPException."""
+        from services.security import get_current_user
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user("invalid.token.here")
+        assert exc_info.value.status_code == 401
+
+    def test_token_without_sub_raises_401(self):
+        """Test token missing 'sub' claim raises HTTPException."""
+        from services.security import get_current_user
+        from core.config import SECRET_KEY, ALGORITHM
+        from fastapi import HTTPException
+
+        payload = {
+            "role": "user",
+            "exp": datetime.utcnow() + timedelta(hours=1),
         }
-        
-        assert len(active_tokens) == 1
-        assert "token2" in active_tokens
+        token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-    def test_session_timeout(self):
-        """Test session timeout enforcement."""
-        session_timeout_minutes = 30
-        session_created = datetime.utcnow()
-        current_time = session_created + timedelta(minutes=25)
-        
-        elapsed = (current_time - session_created).total_seconds() / 60
-        is_expired = elapsed >= session_timeout_minutes
-        
-        assert is_expired is False
-        
-        current_time = session_created + timedelta(minutes=31)
-        elapsed = (current_time - session_created).total_seconds() / 60
-        is_expired = elapsed >= session_timeout_minutes
-        
-        assert is_expired is True
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user(token)
+        assert exc_info.value.status_code == 401
+
+
+class TestRoleAuthorization:
+    """Test require_user and require_admin role checks."""
+
+    def test_require_user_accepts_user_role(self):
+        """Test require_user allows user role."""
+        from services.security import require_user
+
+        user = {"username": "test", "role": "user"}
+        result = require_user(user)
+        assert result == user
+
+    def test_require_user_accepts_admin_role(self):
+        """Test require_user allows admin role."""
+        from services.security import require_user
+
+        user = {"username": "admin", "role": "admin"}
+        result = require_user(user)
+        assert result == user
+
+    def test_require_user_rejects_invalid_role(self):
+        """Test require_user rejects unknown roles."""
+        from services.security import require_user
+        from fastapi import HTTPException
+
+        user = {"username": "test", "role": "superuser"}
+        with pytest.raises(HTTPException) as exc_info:
+            require_user(user)
+        assert exc_info.value.status_code == 403
+
+    def test_require_admin_accepts_admin(self):
+        """Test require_admin allows admin role."""
+        from services.security import require_admin
+
+        user = {"username": "admin", "role": "admin"}
+        result = require_admin(user)
+        assert result == user
+
+    def test_require_admin_rejects_user_role(self):
+        """Test require_admin rejects user role."""
+        from services.security import require_admin
+        from fastapi import HTTPException
+
+        user = {"username": "test", "role": "user"}
+        with pytest.raises(HTTPException) as exc_info:
+            require_admin(user)
+        assert exc_info.value.status_code == 403

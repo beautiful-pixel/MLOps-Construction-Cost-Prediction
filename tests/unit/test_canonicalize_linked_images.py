@@ -1,5 +1,13 @@
-import uuid
+import sys
 import os
+import uuid
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
+# Set CONFIG_ROOT for data_contract imports
+CONFIGS_DIR = str(Path(__file__).parent.parent.parent / "configs")
+os.environ.setdefault("CONFIG_ROOT", CONFIGS_DIR)
 
 from data.linked_files import canonicalize_linked_images
 

@@ -174,7 +174,7 @@ def canonicalize_linked_images(
             else:
                 shutil.copy2(src_path, dest_path)
 
-            relative_path = str(Path("images") / name / new_name)
+            relative_path = (Path("images") / name / new_name).as_posix()
 
             mapping[name][filename] = relative_path
 
