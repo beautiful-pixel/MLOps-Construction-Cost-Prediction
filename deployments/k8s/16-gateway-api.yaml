@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-api
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway-api
+  template:
+    metadata:
+      labels:
+        app: gateway-api
+    spec:
+      containers:
+        - name: gateway-api
+          image: gateway-api:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: mlops-env
+            - secretRef:
+                name: mlops-secrets
+          env:
+            - name: MLFLOW_URL
+              value: "http://mlflow:5000"
+            - name: AIRFLOW_URL
+              value: "http://airflow-webserver:8080"
+            - name: INFERENCE_URL
+              value: "http://inference-api:8000"
+            - name: INFERENCE_API_URL
+              value: "http://inference-api:8000"
+            - name: CONFIGS_DIR
+              value: "/app/configs"
+            - name: CONFIG_ROOT
+              value: "/app/configs"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-api
+  namespace: mlops
+spec:
+  selector:
+    app: gateway-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+  type: NodePort

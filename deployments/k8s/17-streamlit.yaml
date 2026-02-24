@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streamlit
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: streamlit
+  template:
+    metadata:
+      labels:
+        app: streamlit
+    spec:
+      containers:
+        - name: streamlit
+          image: mlops-construction-cost-prediction-streamlit:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - configMapRef:
+                name: mlops-env
+          env:
+            - name: GATEWAY_API_URL
+              value: "http://gateway-api:8080"
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:9090"
+            - name: GRAFANA_URL
+              value: "http://grafana:3000/grafana"
+            - name: AIRFLOW_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: AIRFLOW_USER
+            - name: AIRFLOW_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: AIRFLOW_PASSWORD
+          volumeMounts:
+            - name: project
+              mountPath: /opt/project
+      volumes:
+        - name: project
+          persistentVolumeClaim:
+            claimName: project-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: streamlit
+  namespace: mlops
+spec:
+  selector:
+    app: streamlit
+  ports:
+    - port: 8501
+      targetPort: 8501
+      nodePort: 30501
+  type: NodePort

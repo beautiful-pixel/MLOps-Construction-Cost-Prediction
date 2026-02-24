@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: mlops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-scheduler
+  template:
+    metadata:
+      labels:
+        app: airflow-scheduler
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command: ["sh", "-c", "mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow"]
+          volumeMounts:
+            - name: airflow-home
+              mountPath: /opt/airflow
+      containers:
+        - name: airflow-scheduler
+          image: mlops-construction-cost-prediction-airflow-scheduler:latest
+          imagePullPolicy: Never
+          command: ["airflow", "scheduler"]
+          envFrom:
+            - configMapRef:
+                name: mlops-env
+            - secretRef:
+                name: mlops-secrets
+          volumeMounts:
+            - name: airflow-home
+              mountPath: /opt/airflow
+            - name: project
+              mountPath: /opt/project
+      volumes:
+        - name: airflow-home
+          persistentVolumeClaim:
+            claimName: airflow-pvc
+        - name: project
+          persistentVolumeClaim:
+            claimName: project-pvc
