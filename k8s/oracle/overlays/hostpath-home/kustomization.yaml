@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: mlops
+
+resources:
+  - ../../00-namespace.yaml
+  - ../../01-configmap-env.yaml
+  - ../../02-configmap-prometheus.yaml
+  # Le secret doit être appliqué avec de vraies valeurs (ne pas committer le vrai secret)
+  # kubectl apply -f k8s/oracle/03-secrets.yaml
+  - 10-storage-hostpath-home.yaml
+  - ../../20-postgres.yaml
+  - ../../30-mlflow.yaml
+  - ../../40-airflow.yaml
+  - ../../50-inference-api.yaml
+  - ../../60-gateway-api.yaml
+  - ../../70-prometheus.yaml
+  - ../../80-grafana.yaml
+  # Optionnel
+  # - ../../90-streamlit.yaml

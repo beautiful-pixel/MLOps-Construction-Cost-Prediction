@@ -1,0 +1,159 @@
+# Variante "admin sans root": PV/PVC hostPath dans /home/ubuntu (pas besoin d'écrire dans /opt)
+# Adapte les chemins si ton user est différent.
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: ["ReadWriteOnce"]
+  hostPath:
+    path: /home/ubuntu/k8s-data/postgres
+  storageClassName: manual
+  persistentVolumeReclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: manual
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mlflow-artifacts-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: ["ReadWriteOnce"]
+  hostPath:
+    path: /home/ubuntu/k8s-data/mlflow-artifacts
+  storageClassName: manual
+  persistentVolumeReclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts-pvc
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: manual
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: airflow-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: ["ReadWriteOnce"]
+  hostPath:
+    path: /home/ubuntu/k8s-data/airflow
+  storageClassName: manual
+  persistentVolumeReclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-pvc
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: manual
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: project-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: ["ReadWriteMany"]
+  hostPath:
+    # Le repo cloné sur le serveur (utilisé par Airflow + inference pour lire configs/data)
+    path: /home/ubuntu/mlops-project
+  storageClassName: manual
+  persistentVolumeReclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: project-pvc
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: manual
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prometheus-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: ["ReadWriteOnce"]
+  hostPath:
+    path: /home/ubuntu/k8s-data/prometheus
+  storageClassName: manual
+  persistentVolumeReclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: manual
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: grafana-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: ["ReadWriteOnce"]
+  hostPath:
+    path: /home/ubuntu/k8s-data/grafana
+  storageClassName: manual
+  persistentVolumeReclaimPolicy: Retain
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: manual

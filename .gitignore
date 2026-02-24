@@ -72,6 +72,9 @@ airflow_home/
 airflow_home/logs/
 airflow_home/*.cfg
 
+# Kubernetes secrets (local only)
+k8s/oracle/03-secrets.yaml
+
 # pycache
 __pycache__/
 *.pyc

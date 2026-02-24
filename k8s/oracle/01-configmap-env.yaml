@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mlops-env
+data:
+  # Core URLs (in-cluster)
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
+  AIRFLOW_URL: "http://airflow-webserver:8080"
+  INFERENCE_API_URL: "http://inference-api:8000"
+
+  # Model config
+  MLFLOW_EXPERIMENT: "construction_cost"
+  MLFLOW_MODEL_NAME: "construction_cost_model"
+
+  # Project paths used by pipelines
+  REPO_ROOT: "/opt/project"
+  CONFIG_ROOT: "/opt/project/configs"
+  DATA_ROOT: "/opt/project/data"
+
+  # Airflow config
+  AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  AIRFLOW__CORE__DAGS_FOLDER: "/opt/project/dags"
+  AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+  AIRFLOW__CORE__HOSTNAME_CALLABLE: "airflow.utils.net.get_host_ip_address"
+
+  # Gateway DB defaults (Postgres init script creates this db/user)
+  GATEWAY_DB_HOST: "postgres"
+  GATEWAY_DB_PORT: "5432"
+  GATEWAY_DB_NAME: "gateway_api"
+  GATEWAY_DB_USER: "gateway"
+
+  # Grafana served under /grafana via Nginx reverse proxy
+  GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/grafana/"
+  GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+  GF_AUTH_ANONYMOUS_ENABLED: "true"
+  GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+  GF_SECURITY_ALLOW_EMBEDDING: "true"

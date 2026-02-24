@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-webserver
+spec:
+  selector:
+    app: airflow-webserver
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: airflow-init
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: airflow-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: airflow-init
+          image: REPLACE_ME/mlops-airflow:latest
+          env:
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: LocalExecutor
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://airflow:airflow@postgres/airflow
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "False"
+            - name: AIRFLOW__CORE__DAGS_FOLDER
+              value: /opt/project/dags
+            - name: AIRFLOW__CORE__HOSTNAME_CALLABLE
+              value: airflow.utils.net.get_host_ip_address
+            - name: AIRFLOW__API__AUTH_BACKENDS
+              value: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+            - name: AIRFLOW_PROJECT_ROOT
+              value: /opt/project
+            - name: REPO_ROOT
+              value: /opt/project
+            - name: CONFIG_ROOT
+              value: /opt/project/configs
+            - name: DATA_ROOT
+              value: /opt/project/data
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+            - name: MLFLOW_EXPERIMENT
+              value: construction_cost
+            - name: MLFLOW_MODEL_NAME
+              value: construction_cost_model
+          volumeMounts:
+            - name: airflow-home
+              mountPath: /opt/airflow
+            - name: project
+              mountPath: /opt/project
+            - name: mlflow-artifacts
+              mountPath: /mlflow_artifacts
+          command: ["bash", "-lc"]
+          args:
+            - |
+              airflow db migrate && \
+              airflow users create \
+                --username admin \
+                --password admin \
+                --firstname Admin \
+                --lastname User \
+                --role Admin \
+                --email admin@example.com || true
+      volumes:
+        - name: airflow-home
+          persistentVolumeClaim:
+            claimName: airflow-pvc
+        - name: project
+          persistentVolumeClaim:
+            claimName: project-pvc
+        - name: mlflow-artifacts
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-webserver
+  template:
+    metadata:
+      labels:
+        app: airflow-webserver
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command: ["sh", "-c", "mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow"]
+          volumeMounts:
+            - name: airflow-home
+              mountPath: /opt/airflow
+      containers:
+        - name: airflow-webserver
+          image: REPLACE_ME/mlops-airflow:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: LocalExecutor
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://airflow:airflow@postgres/airflow
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "False"
+            - name: AIRFLOW__CORE__DAGS_FOLDER
+              value: /opt/project/dags
+            - name: AIRFLOW__CORE__HOSTNAME_CALLABLE
+              value: airflow.utils.net.get_host_ip_address
+            - name: AIRFLOW__API__AUTH_BACKENDS
+              value: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+            - name: AIRFLOW_PROJECT_ROOT
+              value: /opt/project
+            - name: REPO_ROOT
+              value: /opt/project
+            - name: CONFIG_ROOT
+              value: /opt/project/configs
+            - name: DATA_ROOT
+              value: /opt/project/data
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+            - name: MLFLOW_EXPERIMENT
+              value: construction_cost
+            - name: MLFLOW_MODEL_NAME
+              value: construction_cost_model
+          volumeMounts:
+            - name: airflow-home
+              mountPath: /opt/airflow
+            - name: project
+              mountPath: /opt/project
+            - name: mlflow-artifacts
+              mountPath: /mlflow_artifacts
+          command: ["bash", "-lc"]
+          args: ["airflow webserver"]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: airflow-home
+          persistentVolumeClaim:
+            claimName: airflow-pvc
+        - name: project
+          persistentVolumeClaim:
+            claimName: project-pvc
+        - name: mlflow-artifacts
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-scheduler
+  template:
+    metadata:
+      labels:
+        app: airflow-scheduler
+    spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command: ["sh", "-c", "mkdir -p /opt/airflow/logs && chmod -R 777 /opt/airflow"]
+          volumeMounts:
+            - name: airflow-home
+              mountPath: /opt/airflow
+      containers:
+        - name: airflow-scheduler
+          image: REPLACE_ME/mlops-airflow:latest
+          env:
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: LocalExecutor
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://airflow:airflow@postgres/airflow
+            - name: AIRFLOW__CORE__LOAD_EXAMPLES
+              value: "False"
+            - name: AIRFLOW__CORE__DAGS_FOLDER
+              value: /opt/project/dags
+            - name: AIRFLOW__CORE__HOSTNAME_CALLABLE
+              value: airflow.utils.net.get_host_ip_address
+            - name: AIRFLOW_PROJECT_ROOT
+              value: /opt/project
+            - name: REPO_ROOT
+              value: /opt/project
+            - name: CONFIG_ROOT
+              value: /opt/project/configs
+            - name: DATA_ROOT
+              value: /opt/project/data
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+            - name: MLFLOW_EXPERIMENT
+              value: construction_cost
+            - name: MLFLOW_MODEL_NAME
+              value: construction_cost_model
+          volumeMounts:
+            - name: airflow-home
+              mountPath: /opt/airflow
+            - name: project
+              mountPath: /opt/project
+            - name: mlflow-artifacts
+              mountPath: /mlflow_artifacts
+          command: ["bash", "-lc"]
+          args: ["airflow scheduler"]
+      volumes:
+        - name: airflow-home
+          persistentVolumeClaim:
+            claimName: airflow-pvc
+        - name: project
+          persistentVolumeClaim:
+            claimName: project-pvc
+        - name: mlflow-artifacts
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
