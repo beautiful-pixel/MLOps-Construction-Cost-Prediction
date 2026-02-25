@@ -254,6 +254,27 @@ if st.button("Promote to Production"):
             assert_response_ok(response, admin_only=True)
         st.error(response.text or "Promotion failed")
 
+# reload inference API after promotion
+
+st.subheader("Serving Controls")
+st.caption("reload the model served by the inference API after a promotion.")
+
+if st.button("Reload production model (Inference API)"):
+    with st.spinner("Reloading model..."):
+        r = requests.post(
+            f"{GATEWAY_API_URL}/reload",
+            headers=auth_headers(),
+            timeout=20,
+        )
+    assert_response_ok(r, admin_only=True)
+    payload = r.json()
+    st.success(
+        "Reload OK — "
+        f"model_version={payload.get('model_version')} | "
+        f"run_id={payload.get('run_id')}"
+    )
+
+st.divider()
 
 # Refresh
 

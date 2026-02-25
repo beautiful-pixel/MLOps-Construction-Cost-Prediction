@@ -1,0 +1,44 @@
+data_contract: 1
+image_features: {}
+tabular_features:
+  access_to_highway:
+    encoding: binary
+    impute: most_frequent
+    type: categorical
+  deflated_gdp_usd:
+    impute: median
+    type: numeric
+  developed_country:
+    encoding: binary
+    impute: most_frequent
+    type: categorical
+  koppen_climate_zone:
+    encoding: onehot
+    impute: most_frequent
+    type: categorical
+  region_economic_classification:
+    encoding: ordinal
+    impute: most_frequent
+    order:
+    - Low income
+    - Lower-middle income
+    - Upper-middle income
+    - High income
+    type: categorical
+  seismic_hazard_zone:
+    encoding: ordinal
+    impute: most_frequent
+    order:
+    - Very Low
+    - Low
+    - Moderate
+    - High
+    - Very High
+    type: categorical
+  straight_distance_to_capital_km:
+    clip:
+    - 0
+    - 5000
+    impute: median
+    type: numeric
+version: 4

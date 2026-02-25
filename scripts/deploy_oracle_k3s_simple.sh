@@ -27,11 +27,38 @@ fi
 echo "Applying secret..."
 kubectl apply -n "$NAMESPACE" -f "$SECRET_FILE" || kubectl apply -f "$SECRET_FILE"
 
+apply_kustomize_dir() {
+  local kustomize_dir="$1"
+
+  # Fast path: works when the kubectl/kustomize load-restrictor allows it.
+  if kubectl apply -k "$kustomize_dir"; then
+    return 0
+  fi
+
+  echo "kubectl apply -k failed (likely load-restrictor). Falling back to build+apply..." >&2
+
+  if kubectl kustomize "$kustomize_dir" --load-restrictor LoadRestrictionsNone >/dev/null 2>&1; then
+    kubectl kustomize "$kustomize_dir" --load-restrictor LoadRestrictionsNone | kubectl apply -f -
+    return 0
+  fi
+
+  if command -v kustomize >/dev/null 2>&1; then
+    kustomize build --load-restrictor LoadRestrictionsNone "$kustomize_dir" | kubectl apply -f -
+    return 0
+  fi
+
+  echo "ERROR: Cannot apply kustomize overlay due to load-restrictor, and neither 'kubectl kustomize --load-restrictor' nor 'kustomize' is available." >&2
+  echo "Fix options:" >&2
+  echo "  - Install kustomize (binary in your home dir is enough), then rerun this script" >&2
+  echo "  - Or run: kubectl kustomize <dir> --load-restrictor LoadRestrictionsNone | kubectl apply -f -" >&2
+  return 1
+}
+
 echo "Applying manifests (overlay=$OVERLAY)..."
 if [[ "$OVERLAY" == "base" ]]; then
-  kubectl apply -k "$ROOT_DIR/k8s/oracle"
+  apply_kustomize_dir "$ROOT_DIR/k8s/oracle"
 else
-  kubectl apply -k "$ROOT_DIR/k8s/oracle/overlays/$OVERLAY"
+  apply_kustomize_dir "$ROOT_DIR/k8s/oracle/overlays/$OVERLAY"
 fi
 
 echo "\nStatus:"

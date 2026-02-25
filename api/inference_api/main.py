@@ -2,6 +2,8 @@ import os
 import time
 import logging
 from bisect import bisect_right
+from dataclasses import dataclass
+from threading import Lock
 from typing import Optional, Type
 from pydantic import BaseModel
 
@@ -244,12 +246,71 @@ def _compute_confidence_score(
 
 # Global state (loaded at startup)
 
-model: Optional[object] = None
-served_model_version: Optional[str] = None
-feature_version: Optional[int] = None
-feature_order: Optional[list[str]] = None
-InputModel: Optional[Type[BaseModel]] = None
-target_name: Optional[str] = None
+
+@dataclass(frozen=True)
+class ModelState:
+    model: object
+    served_model_version: Optional[str]
+    run_id: str
+    feature_version: int
+    feature_order: list[str]
+    InputModel: Type[BaseModel]
+    target_name: str
+
+
+_state: Optional[ModelState] = None
+_state_lock = Lock()
+
+
+def _load_state_from_production() -> ModelState:
+    model_name = get_model_name()
+
+    loaded_model = load_production_model(model_name=model_name)
+
+    mv = get_model_version_from_alias(model_name, "prod")
+    served_version: Optional[str] = None
+    if mv is not None:
+        served_version = str(mv.version)
+
+    run_id = getattr(loaded_model.metadata, "run_id", None)
+    if run_id is None:
+        raise RuntimeError("Unable to retrieve run_id from model metadata")
+
+    config = get_run_config(run_id)
+
+    resolved_feature_version = int(config["feature_version"])
+    feature_schema = load_feature_schema(resolved_feature_version)
+    contract_version = feature_schema["data_contract"]
+    data_contract = load_data_contract(contract_version)
+
+    resolved_target_name = data_contract["target"]
+    resolved_feature_order = get_ordered_features(resolved_feature_version)
+    resolved_input_model = build_pydantic_model(resolved_feature_version)
+
+    return ModelState(
+        model=loaded_model,
+        served_model_version=served_version,
+        run_id=str(run_id),
+        feature_version=resolved_feature_version,
+        feature_order=resolved_feature_order,
+        InputModel=resolved_input_model,
+        target_name=str(resolved_target_name),
+    )
+
+
+def _set_state(new_state: Optional[ModelState]) -> None:
+    global _state
+    with _state_lock:
+        _state = new_state
+
+
+def _refresh_served_model_gauge(state: Optional[ModelState]) -> None:
+    if state is None or state.served_model_version is None:
+        return
+    try:
+        served_model_version_gauge.set(float(state.served_model_version))
+    except ValueError:
+        logging.warning("Model version is not numeric, gauge not set.")
 
 
 def require_internal_token(authorization: str | None = Header(default=None)):
@@ -271,56 +332,58 @@ def require_internal_token(authorization: str | None = Header(default=None)):
 
 @app.on_event("startup")
 def startup_event():
-    global model
-    global served_model_version
-    global feature_version
-    global feature_order
-    global InputModel
-    global target_name
-
     logging.info("Starting inference API initialization")
 
     try:
-        model_name = get_model_name()
-
-        model = load_production_model(model_name=model_name)
-
-        mv = get_model_version_from_alias(model_name, "prod")
-        if mv is not None:
-            served_model_version = str(mv.version)
-
-        run_id = getattr(model.metadata, "run_id", None)
-        if run_id is None:
-            raise RuntimeError("Unable to retrieve run_id from model metadata")
-
-        config = get_run_config(run_id)
-
-        feature_version = config["feature_version"]
-        feature_schema = load_feature_schema(feature_version)
-        contract_version = feature_schema["data_contract"]
-        data_contract = load_data_contract(contract_version)
-
-        target_name = data_contract["target"]
-
-        feature_order = get_ordered_features(feature_version)
-
-        InputModel = build_pydantic_model(feature_version)
-
-        if served_model_version is not None:
-            try:
-                served_model_version_gauge.set(float(served_model_version))
-            except ValueError:
-                logging.warning("Model version is not numeric, gauge not set.")
+        state = _load_state_from_production()
+        _set_state(state)
+        _refresh_served_model_gauge(state)
 
         logging.info(
-            "Model loaded successfully | "
-            f"run_id={run_id} | "
-            f"feature_version={feature_version}"
+            "Model loaded successfully | run_id=%s | feature_version=%s | model_version=%s",
+            state.run_id,
+            state.feature_version,
+            state.served_model_version,
         )
 
     except Exception:
         logging.warning("No production model available.")
-        model = None
+        _set_state(None)
+
+
+@app.post("/reload")
+def reload_model(internal=Depends(require_internal_token)):
+    """Reload the production model (alias 'prod') without restarting the service."""
+
+    start_time = time.time()
+    try:
+        state = _load_state_from_production()
+        _set_state(state)
+        _refresh_served_model_gauge(state)
+        _record_request_metrics(
+            "/reload",
+            "POST",
+            200,
+            start_time,
+        )
+        return {
+            "status": "reloaded",
+            "model_version": state.served_model_version,
+            "run_id": state.run_id,
+            "feature_version": state.feature_version,
+        }
+    except Exception as exc:
+        logging.exception("Reload error")
+        _record_request_metrics(
+            "/reload",
+            "POST",
+            500,
+            start_time,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Reload failed: {exc}",
+        )
 
 
 # Prediction endpoint
@@ -330,7 +393,8 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
 
     endpoint = "/predict"
     method = "POST"
-    if model is None:
+    state = _state
+    if state is None:
         _record_request_metrics(
             endpoint,
             method,
@@ -346,13 +410,13 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
 
     try:
         # Validate using dynamic Pydantic model
-        validated = InputModel(**payload)
+        validated = state.InputModel(**payload)
         input_dict = validated.model_dump()
 
         # Use DataFrame to preserve feature alignment
         input_df = pd.DataFrame([input_dict])
 
-        prediction = model.predict(input_df)
+        prediction = state.model.predict(input_df)
         prediction_value = float(prediction[0])
 
         _record_request_metrics(
@@ -363,13 +427,13 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
         )
         category = _resolve_prediction_category(input_dict, prediction_value)
         predictions_by_category.labels(category=str(category)).inc()
-        confidence_score = _compute_confidence_score(model, input_df)
+        confidence_score = _compute_confidence_score(state.model, input_df)
         if confidence_score is not None:
             prediction_confidence_score_histogram.observe(confidence_score)
 
         return {
             "prediction": prediction_value,
-            "model_version": served_model_version
+            "model_version": state.served_model_version
         }
 
     except Exception:
@@ -387,14 +451,15 @@ def predict(payload: dict, internal=Depends(require_internal_token)):
 
 
 def _build_health_payload() -> dict:
-    if model is None:
+    state = _state
+    if state is None:
         return {
             "status": "no_model_loaded",
             "message": "Il n'y a pas de modèle actuellement.",
         }
     return {
         "status": "ok",
-        "model_version": served_model_version or "unknown"
+        "model_version": state.served_model_version or "unknown"
     }
 
 
@@ -426,12 +491,13 @@ def metrics():
 # Schema endpoint
 @app.get("/schema")
 def get_schema(internal=Depends(require_internal_token)):
-    if InputModel is None or target_name is None:
+    state = _state
+    if state is None:
         raise HTTPException(status_code=503, detail="Model not initialized")
 
 
     return {
-        "model_version": served_model_version,
-        "target": target_name,
-        "input_schema": InputModel.model_json_schema(),
+        "model_version": state.served_model_version,
+        "target": state.target_name,
+        "input_schema": state.InputModel.model_json_schema(),
     }

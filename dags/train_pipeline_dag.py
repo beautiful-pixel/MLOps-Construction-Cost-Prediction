@@ -14,7 +14,11 @@ Flow:
 
 import logging
 import mlflow
+import os
 import pendulum
+import json
+import urllib.request
+import urllib.error
 
 from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
@@ -30,6 +34,9 @@ from utils.active_config import (
     get_default_split_version,
     get_default_feature_version,
     get_default_model_version,
+    set_default_split_version,
+    set_default_feature_version,
+    set_default_model_version,
 )
 
 from splitting.split_schema import get_allowed_split_versions
@@ -46,6 +53,51 @@ from utils.mlflow_config import configure_mlflow
 
 
 logger = logging.getLogger(__name__)
+
+
+def _reload_inference_service() -> dict:
+    """Ask inference service to reload the production model (alias 'prod').
+
+    Uses internal service-to-service token.
+    Returns a small status payload; raises only on hard HTTP failures.
+    """
+
+    base_url = os.getenv("INFERENCE_API_URL", "http://inference-api:8000").rstrip("/")
+    token = os.getenv("INFERENCE_INTERNAL_TOKEN")
+
+    if not token:
+        return {
+            "reloaded": False,
+            "reason": "INFERENCE_INTERNAL_TOKEN not configured",
+        }
+
+    url = f"{base_url}/reload"
+    req = urllib.request.Request(
+        url,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        data=b"{}",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body = resp.read().decode("utf-8")
+            payload = json.loads(body) if body else {}
+            return {
+                "reloaded": True,
+                "status_code": resp.status,
+                "payload": payload,
+            }
+    except urllib.error.HTTPError as exc:
+        details = exc.read().decode("utf-8") if exc.fp else ""
+        raise RuntimeError(
+            f"Inference reload failed (HTTP {exc.code}): {details}"
+        ) from exc
+    except Exception as exc:
+        raise RuntimeError(f"Inference reload failed: {exc}") from exc
 
 
 def _try_send_slack(text: str) -> None:
@@ -268,6 +320,57 @@ def train_pipeline():
 
         return {**training_context, **promotion_info}
 
+    # Persist promoted config as defaults
+
+    @task
+    def persist_promoted_defaults_task(training_context: dict) -> dict:
+        """
+        If the candidate model is promoted, persist the training config
+        (split/feature/model versions) into configs/active_config.yaml
+        so future runs without overrides use the promoted strategy.
+        """
+
+        if not training_context.get("promoted", False):
+            return training_context
+
+        split_version = int(training_context["split_version"])
+        feature_version = int(training_context["feature_version"])
+        model_version = int(training_context["model_version"])
+
+        set_default_split_version(split_version)
+        set_default_feature_version(feature_version)
+        set_default_model_version(model_version)
+
+        logger.info(
+            "Active config defaults updated after promotion → split=%s, feature=%s, model=%s",
+            split_version,
+            feature_version,
+            model_version,
+        )
+
+        return training_context
+
+
+    @task
+    def reload_inference_on_promotion_task(training_context: dict) -> dict:
+        """Reload inference service only when a model has been promoted.
+
+        This ensures the online API serves the new MLflow alias 'prod' without
+        requiring a container restart.
+        """
+
+        if not training_context.get("promoted", False):
+            return training_context
+
+        try:
+            result = _reload_inference_service()
+            logger.info("Inference reload result: %s", result)
+        except Exception:
+            # Do not fail the training DAG on reload issues; promotion is already done.
+            logger.exception("Inference reload after promotion failed")
+
+        return training_context
+
     # Notify
 
     @task
@@ -286,9 +389,12 @@ def train_pipeline():
     evaluated_context = evaluate_task(trained_context, run_info)
 
     promoted_context = promote_task(evaluated_context, run_info)
-    notify = notify_success_task(promoted_context)
 
-    config >> run_info >> split_context >> versioned_context >> trained_context >> evaluated_context >> promoted_context >> notify
+    persisted = persist_promoted_defaults_task(promoted_context)
+    reloaded = reload_inference_on_promotion_task(persisted)
+    notify = notify_success_task(reloaded)
+
+    config >> run_info >> split_context >> versioned_context >> trained_context >> evaluated_context >> promoted_context >> persisted >> reloaded >> notify
 
 
 train_pipeline()

@@ -51,3 +51,15 @@ def get_schema():
 
     response.raise_for_status()
     return response.json()
+
+
+def reload_model():
+
+    response = requests.post(
+        f"{INFERENCE_API_URL}/reload",
+        headers=_auth_headers(),
+        timeout=15,
+    )
+
+    response.raise_for_status()
+    return response.json()

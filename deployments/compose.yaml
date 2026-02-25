@@ -109,6 +109,8 @@ services:
     environment:
       <<: *api-env
       API_TITLE: ${INFERENCE_API_TITLE}
+    depends_on:
+      - mlflow
     volumes:
       - mlflow_artifacts:/mlflow_artifacts
       - ../configs:/app/configs
