@@ -91,9 +91,9 @@ class TestTrainPageStructure:
 
     def test_page_uses_status_colors(self):
         """Train page must define status-to-color mapping."""
-        assert "#48bb78" in self.source  # success green
-        assert "#f56565" in self.source  # failed red
-        assert "#ecc94b" in self.source  # running yellow
+        assert "#22c55e" in self.source  # success green-500
+        assert "#ef4444" in self.source  # failed red-500
+        assert "#06b6d4" in self.source  # running cyan-500
 
     def test_page_sends_conf_with_trigger(self):
         """Train page must send config (feature/model/split versions) when triggering."""
@@ -169,9 +169,9 @@ class TestDatasetPageStructure:
 
     def test_page_uses_status_colors(self):
         """Dataset page must define status-to-color mapping."""
-        assert "#48bb78" in self.source  # success
-        assert "#f56565" in self.source  # failed
-        assert "#ecc94b" in self.source  # running
+        assert "#22c55e" in self.source  # success green-500
+        assert "#ef4444" in self.source  # failed red-500
+        assert "#06b6d4" in self.source  # running cyan-500
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +305,6 @@ class TestPageConsistency:
         dataset_src = (PAGES_DIR / "3_Datasets.py").read_text(encoding="utf-8")
 
         # Both should define the same success/failed/running colors
-        for color in ["#48bb78", "#f56565", "#ecc94b"]:
+        for color in ["#22c55e", "#ef4444", "#06b6d4"]:
             assert color in train_src
             assert color in dataset_src

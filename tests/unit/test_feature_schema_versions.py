@@ -117,15 +117,20 @@ class TestFeatureSchemaV2:
         """Test v2 still references data contract v1."""
         assert schema_v2["data_contract"] == 1
 
-    def test_v2_has_same_feature_count_as_v1(self, schema_v1, schema_v2):
-        """Test v2 has same number of tabular features as v1."""
-        v1_count = len(schema_v1["tabular_features"])
+    def test_v2_has_expected_feature_count(self, schema_v2):
+        """Test v2 has 7 tabular features (v1 features + koppen_climate_zone)."""
         v2_count = len(schema_v2["tabular_features"])
-        assert v1_count == v2_count
+        assert v2_count == 7
 
-    def test_v2_region_encoding_is_onehot(self, schema_v2):
-        """Test that v2 uses onehot encoding for region_economic_classification."""
-        assert schema_v2["tabular_features"]["region_economic_classification"]["encoding"] == "onehot"
+    def test_v2_adds_koppen_climate_zone(self, schema_v2):
+        """Test that v2 adds koppen_climate_zone with onehot encoding."""
+        cfg = schema_v2["tabular_features"]["koppen_climate_zone"]
+        assert cfg["type"] == "categorical"
+        assert cfg["encoding"] == "onehot"
+
+    def test_v2_region_encoding_stays_ordinal(self, schema_v2):
+        """Test that v2 keeps ordinal encoding for region_economic_classification."""
+        assert schema_v2["tabular_features"]["region_economic_classification"]["encoding"] == "ordinal"
 
     def test_v2_seismic_still_ordinal(self, schema_v2):
         """Test seismic_hazard_zone stays ordinal in v2."""
@@ -140,22 +145,19 @@ class TestFeatureSchemaV2:
 class TestFeatureSchemaComparison:
     """Test comparison between v1 and v2 using actual loaded schemas."""
 
-    def test_v1_v2_same_feature_set(self, schema_v1, schema_v2):
-        """Test v1 and v2 share exactly the same feature names."""
+    def test_v2_is_superset_of_v1(self, schema_v1, schema_v2):
+        """Test v2 contains all v1 features plus koppen_climate_zone."""
         v1_features = set(schema_v1["tabular_features"].keys())
         v2_features = set(schema_v2["tabular_features"].keys())
-        assert v1_features == v2_features
+        assert v1_features.issubset(v2_features)
+        assert v2_features - v1_features == {"koppen_climate_zone"}
 
-    def test_v1_v2_encoding_difference_only_in_region(self, schema_v1, schema_v2):
-        """Test that v1 and v2 differ only in region_economic_classification encoding."""
-        differences = []
+    def test_v1_v2_shared_features_same_encoding(self, schema_v1, schema_v2):
+        """Test that shared features between v1 and v2 have identical encoding."""
         for feat in schema_v1["tabular_features"]:
             v1_enc = schema_v1["tabular_features"][feat].get("encoding")
             v2_enc = schema_v2["tabular_features"][feat].get("encoding")
-            if v1_enc != v2_enc:
-                differences.append(feat)
-
-        assert differences == ["region_economic_classification"]
+            assert v1_enc == v2_enc, f"Encoding mismatch for {feat}: {v1_enc} != {v2_enc}"
 
     def test_v1_v2_same_data_contract(self, schema_v1, schema_v2):
         """Test both versions reference the same data contract."""
