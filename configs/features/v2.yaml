@@ -12,8 +12,12 @@ tabular_features:
     encoding: binary
     impute: most_frequent
     type: categorical
-  region_economic_classification:
+  koppen_climate_zone:
     encoding: onehot
+    impute: most_frequent
+    type: categorical
+  region_economic_classification:
+    encoding: ordinal
     impute: most_frequent
     order:
     - Low income

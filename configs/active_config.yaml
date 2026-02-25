@@ -1,5 +1,5 @@
 data_contract_version: 1
 training_defaults:
-  feature_version: 4
-  model_version: 4
+  feature_version: 2
+  model_version: 1
   split_version: 1

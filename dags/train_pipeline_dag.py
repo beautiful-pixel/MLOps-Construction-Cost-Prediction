@@ -66,6 +66,10 @@ def _reload_inference_service() -> dict:
     token = os.getenv("INFERENCE_INTERNAL_TOKEN")
 
     if not token:
+        logger.warning(
+            "Skipping inference reload: INFERENCE_INTERNAL_TOKEN not configured (INFERENCE_API_URL=%s)",
+            base_url,
+        )
         return {
             "reloaded": False,
             "reason": "INFERENCE_INTERNAL_TOKEN not configured",

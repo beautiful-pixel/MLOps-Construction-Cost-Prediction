@@ -133,6 +133,53 @@ mlops-project/
 )
 
 
+# ── Platform Services Topology ───────────────────────────────
+
+st.subheader("Platform Services (High-Level)")
+
+st.graphviz_chart(
+    r"""
+    digraph services_topology {
+        rankdir=TB
+        node [shape=box style="rounded,filled"
+              fontname="Helvetica" fontsize=11]
+        edge [fontname="Helvetica" fontsize=9]
+
+        nginx      [label="Nginx\n(HTTPS Entry Point)" fillcolor="#e0e0e0"]
+        streamlit  [label="Streamlit UI" fillcolor="#e8f4fd"]
+        gateway    [label="Gateway API" fillcolor="#e8f0fe"]
+        inference  [label="Inference API" fillcolor="#c8e6c9"]
+        airflow    [label="Airflow" fillcolor="#bbdefb"]
+        mlflow     [label="MLflow Registry" fillcolor="#fce4ec"]
+        postgres   [label="PostgreSQL" fillcolor="#dcedc8"]
+        prometheus [label="Prometheus" fillcolor="#c8e6c9"]
+        grafana    [label="Grafana" fillcolor="#bbdefb"]
+
+        nginx -> streamlit [label="/"]
+        nginx -> gateway   [label="/api"]
+        nginx -> grafana   [label="/grafana"]
+
+        streamlit -> gateway
+
+        gateway -> mlflow    [label="List runs"]
+        gateway -> airflow   [label="Trigger training"]
+        gateway -> inference [label="Predict"]
+
+        inference -> mlflow [label="Load prod model" style=dashed]
+        airflow -> mlflow   [label="Log & register model"]
+        airflow -> inference [label="Reload after promote" style=dashed]
+
+        mlflow -> postgres
+
+        prometheus -> gateway   [label="Scrape" style=dashed]
+        prometheus -> inference [label="Scrape" style=dashed]
+        grafana -> prometheus
+    }
+    """,
+    use_container_width=True,
+)
+
+
 # ── Section 2: Pipeline Architecture ─────────────────────────
 
 st.header("2. Pipeline Architecture")

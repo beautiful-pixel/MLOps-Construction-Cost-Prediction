@@ -1,294 +1,230 @@
+st.code(r"""
 # MLOps – Construction Cost Prediction
 
-## Multimodal Learning with Structured Data & Satellite Imagery (Solafune)
+## Solafune Challenge – Industrial ML Platform
 
-This project implements an end-to-end MLOps pipeline for the Construction Cost Prediction challenge (Solafune). The current training/inference baseline is tabular-only; image ingestion/validation is in place and multimodal modeling is planned.
+This project implements an end-to-end MLOps platform for the Solafune Construction Cost Prediction challenge.
 
-Beyond model performance, the focus is on building a reproducible, scalable, and production-oriented machine learning system, covering the full lifecycle from data ingestion to monitoring and maintenance.
+The current production baseline is tabular-only.  
+Image ingestion, validation and versioning are implemented to prepare for future multimodal modeling.
 
----
-
-## Project Objectives
-
-### Machine Learning Objectives
-
-- Predict construction costs using structured tabular features (baseline)
-- Prepare for multimodal modeling by validating and versioning satellite imagery
-- Track and compare experiments reproducibly
-
-### MLOps Objectives
-
-- Design a modular and maintainable architecture
-- Version data, models, and configurations
-- Orchestrate workflows using Airflow
-- Deploy models through FastAPI microservices
-- Implement lightweight scalability
-- Monitor model performance and data drift
-- Automate testing and CI pipelines
+The objective is not only model performance, but the design of a reproducible, modular, production-oriented ML system covering the full lifecycle:
+data ingestion → validation → training → promotion → serving → monitoring.
 
 ---
 
-## Evaluation Metrics
+# Project Objectives
 
-The primary evaluation metric is the Root Mean Squared Logarithmic Error (RMSLE), which is the official metric of the Solafune challenge.
+## Machine Learning
 
-RMSLE focuses on relative errors and is robust to large variations in construction costs.
+- Predict regional construction costs (tabular baseline)
+- Prepare multimodal learning (satellite imagery pipeline ready)
+- Track experiments reproducibly
 
-Complementary metrics:
+## MLOps
 
-- MAE (Mean Absolute Error) for interpretability and business relevance
-- R² (Coefficient of Determination) as a complementary diagnostic metric
-
-All metrics are logged and tracked using MLflow.
-
----
-
-## Project Structure
-
-```text
-mlops_project/
-├── api/
-│   ├── gateway_api/              # API gateway (point d’entrée unique)
-│   │   ├── Dockerfile
-│   │   ├── main.py               # /predict, /train, orchestration
-│   │   └── requirements.txt
-│   │
-│   └── inference_api/            # Microservice d’inférence ML
-│       ├── Dockerfile
-│       ├── main.py               # Exposition /predict
-│       └── requirements.txt
-│
-├── dags/                          # Airflow DAGs
-│   ├── ingestion_dag.py
-│   ├── preprocess_dag.py
-│   └── training_dag.py
-│
-├── src/                           # Logique métier ML (lib Python)
-│   ├── data/                     # Ingestion, preprocessing, validation
-│   ├── training/                 # Entraînement, évaluation
-│   ├── inference/                # Prédiction (utilisée par inference_api)
-│   ├── models/                   # Enregistrement MLflow
-│   └── logging/                  # Logging applicatif
-│
-├── deployments/                   # Déploiement & orchestration
-│   ├── docker-compose.yml        # Stack complète (API, MLflow, nginx, etc.)
-│   ├── Makefile                  # Commandes projet (start/stop/logs)
-│   ├── airflow/
-│   │   └── Dockerfile.airflow
-│   ├── mlflow/
-│   │   └── Dockerfile.mlflow
-│   ├── nginx/
-│   │   ├── nginx.conf
-│   │   └── certs/
-│   └── prometheus/
-│       └── prometheus.yml
-│
-├── data/                          # Données versionnées (DVC)
-│   ├── raw/
-│   ├── processed/
-│   ├── batches/
-│   └── *.dvc
-│
-├── mlflow_server/                 # Backend MLflow (sqlite + artifacts)
-│   ├── mlflow.db
-│   └── artifacts/
-│
-├── monitoring/                    # Monitoring & analyse offline
-│   ├── prometheus/
-│   ├── grafana/
-│   └── evidently/
-│
-├── frontend/
-│   └── streamlit_app.py           # Interface utilisateur
-│
-├── scripts/                       # Entry points manuels
-│   ├── run_ingestion.py
-│   ├── run_training.py
-│   └── split_by_year.py
-│
-├── tests/                         # Tests unitaires et d’intégration
-│
-├── configs/
-│   └── params.yaml                # Paramètres globaux
-│
-├── logs/                          # Logs runtime (non versionnés en prod)
-│
-├── pyproject.toml
-├── requirements-base.txt
-├── uv.lock
-└── README.md
-
-```
-
----
-
-## MLOps Pipeline Overview
-
-### 1. Data Ingestion
-
-- Detection of new datasets (structured data and satellite images)
-- Schema and integrity validation
-- Data versioning using DVC
-
-### 2. Preprocessing & Feature Engineering
-
-- Cleaning and encoding of structured features
-- Image preprocessing (resizing, normalization)
-- Construction of multimodal datasets (planned)
-
-### 3. Model Training & Experiment Tracking
-
-- Train / validation / test split
-- Multimodal model training
+- Modular microservice architecture
+- Versioned configurations (feature / model / split)
+- Data versioning with DVC
 - Experiment tracking with MLflow
-
-### 4. Deployment & Serving
-
-- FastAPI-based microservices
-- Dockerized services
-- Lightweight horizontal scalability using container replication
-- Nginx reverse proxy as a single entry point
-
-### 5. Monitoring & Maintenance
-
-- System and API monitoring with Prometheus and Grafana
-- Data and prediction drift detection using Evidently
-- Support for automated retraining workflows
+- Orchestrated pipelines with Airflow
+- Secure model serving via FastAPI
+- Reverse proxy entrypoint (Nginx)
+- Monitoring with Prometheus & Grafana
+- CI & automated testing
 
 ---
 
-## Architecture Diagram (Mermaid)
+# Architecture Overview
+
+The system is structured around clearly separated responsibilities:
+
+- <span style="color:#616161;">●</span> Entry Layer → Nginx (HTTPS reverse proxy)
+- <span style="color:#1e88e5;">●</span> Serving Layer → Streamlit (app), Gateway API, Inference API
+- <span style="color:#2e7d32;">●</span> Training Layer → Airflow, MLflow, PostgreSQL
+- <span style="color:#ef6c00;">●</span> Monitoring Layer → Prometheus, Grafana
+
+## High-Level Service Diagram
 
 ```mermaid
-flowchart LR
-    User[Client / External User]
-    Nginx[Nginx<br/>Reverse Proxy]
+%%{init: {'theme':'base'}}%%
+flowchart TB
 
-    Gateway[Gateway API<br/>/auth<br/>/predict<br/>/train<br/>/info<br/>/reload]
-    InferenceAPI[Inference API<br/>/predict<br/>/info<br/>/reload]
+    Nginx["Nginx (HTTPS Entry Point)"]
+    Streamlit["Streamlit UI"]
+    Gateway["Gateway API"]
+    Inference["Inference API"]
+    Airflow["Airflow"]
+    MLflow["MLflow Registry"]
+    Postgres["PostgreSQL"]
+    Prometheus["Prometheus"]
+    Grafana["Grafana"]
 
-    RawData[(Docker Volume<br/>Raw Data<br/>versioned with DVC)]
+    Nginx -->|/| Streamlit
+    Nginx -->|/api| Gateway
+    Nginx -->|/grafana| Grafana
+    Streamlit --> Gateway
+    Inference -->|Load prod model| MLflow
+    Gateway -->|List runs| MLflow
+    Gateway -->|Trigger training| Airflow
+    Gateway -->|Predict| Inference
+    Airflow -->|Log & register model| MLflow
+    MLflow --> Postgres
+    Airflow -->|Reload after promote| Inference
+    Prometheus -->|Scrape| Gateway
+    Prometheus -->|Scrape| Inference
+    Grafana --> Prometheus
 
-    DataPipeline[Data Pipeline<br/>Ingest / Validate / Preprocess]
-    ReadyData[(Docker Volume<br/>Preprocessed Data<br/>versioned with DVC)]
+    %% Entry Layer
+    style Nginx fill:#eeeeee,stroke:#616161,stroke-width:2px
 
-    TrainPipeline[Training Pipeline<br/>Train / Eval / Register]
+    %% Serving Layer
+    style Streamlit fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px
+    style Gateway fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px
+    style Inference fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px
 
-    MLflow[MLflow Tracking & Model Registry]
+    %% Training Layer
+    style Airflow fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style MLflow fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style Postgres fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
 
-    Prometheus[Prometheus]
-    Grafana[Grafana]
-
-
-
-    %% User entry point
-    User --> Nginx
-    Nginx --> Gateway
-
-    %% Routing
-    Gateway -- redirect /predict --> InferenceAPI
-    Gateway -- trigger /train --> TrainPipeline
-    TrainPipeline -->|log & register model| MLflow
-    MLflow <-->|load model| InferenceAPI
-
-    %% Inference & monitoring
-    InferenceAPI --> Prometheus
-    Prometheus --> Grafana
-
-    %% Data pipeline
-    RawData -->|new data trigger| DataPipeline
-    DataPipeline --> ReadyData
-    ReadyData --> TrainPipeline
-
+    %% Monitoring Layer
+    style Prometheus fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style Grafana fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
 ```
 
 ---
 
-## Services and Ports
+# Prediction Flow
 
-| Service              | Purpose                     | Port | Public   |
-| -------------------- | --------------------------- | ---- | -------- |
-| Nginx                | Reverse proxy / entry point | 80   | Yes      |
-| Frontend (Streamlit) | Demo UI                     | 8501 | Optional |
-| Airflow              | Orchestration UI            | 8080 | Dev only |
-| MLflow               | Experiment tracking         | 5000 | Dev only |
-| Prometheus           | Metrics scraping            | 9090 | Dev only |
-| Grafana              | Dashboards                  | 3000 | Dev only |
-
-Internal APIs are not exposed directly and are accessed only through Nginx.
+1. User interacts with Streamlit App
+2. Request passes through Nginx (HTTPS)
+3. Gateway authenticates and proxies
+4. Inference API performs prediction
+5. Model loaded from MLflow alias `prod`
+6. Prediction returned to user
 
 ---
 
-## Testing Strategy
+# Model Lifecycle
 
-Unit tests cover:
+1. Create or modify configuration (feature / model / split YAML)
+2. Trigger training via Gateway → Airflow
+3. Log metrics & artifacts in MLflow
+4. Evaluate model performance
+5. Promote if better (alias `prod`)
+6. Airflow triggers `/reload` on Inference API
+7. New model served immediately
 
-- data validation and preprocessing
-- model training and evaluation
-- inference logic
-- FastAPI endpoints
-
-Tests are executed automatically via GitHub Actions.
-
----
-
-## Running the Project
-
-Clone the repository:
-
-    git clone <repository_url>
-    cd mlops_project
-
-Configure environment variables:
-
-    cp .env.example .env
-    # For Docker Compose (deployments), ensure PROJECT_ROOT is set
-    # Example: PROJECT_ROOT=/app in deployments/.env
-
-Start all services:
-
-    docker-compose up --build
+Full traceability is ensured through:
+- versioned configs
+- MLflow params logging
+- DVC data versioning
 
 ---
 
-## Dependency Management (uv)
+# Repository Structure
 
-This project uses uv for dependency management.
+```
+mlops-project/
 
-- Dependencies are defined in pyproject.toml
-- Exact versions are locked in uv.lock
-- Local virtual environments are excluded from version control
-
-This ensures full reproducibility across local development, CI, and Docker environments.
+├── api/                           # FastAPI microservices
+│   ├── gateway_api/               # API gateway (auth, orchestration)
+│   └── inference_api/             # Model serving microservice
+│
+├── src/                           # Core ML business library (Python package)
+│   ├── data/                      # Data ingestion & validation logic
+│   ├── features/                  # Feature schema & preprocessing pipelines
+│   ├── models/                    # Model schema & MLflow loader
+│   ├── inference/                 # Dynamic request schema builder
+│   ├── registry/                  # MLflow registry utilities
+│   ├── splitting/                 # Train/test split orchestration
+│   ├── pipelines/                 # Data & training pipelines (modular)
+│   ├── training/                  # Metrics & training utilities
+│   └── utils/                     # Config resolution, DVC, logging helpers
+│
+├── dags/                          # Airflow DAG definitions
+│   ├── data_pipeline_dag.py
+│   ├── train_pipeline_dag.py
+│   └── retrain_policy_dag.py
+│
+├── configs/                       # Versioned YAML configurations
+│   ├── active_config.yaml
+│   ├── data_contracts/
+│   ├── features/
+│   ├── models/
+│   └── splits/
+│
+├── app/                           # Streamlit dashboard (multi-page UI)
+│
+├── deployments/                   # Docker & Kubernetes manifests
+│
+├── data/                          # DVC versioned datasets
+│   ├── incoming/
+│   ├── raw/
+│   ├── processed/
+│   ├── splits/
+│   └── reference/
+│
+├── tests/                         # Unit & integration tests
+│
+└── mlflow_server/                 # MLflow backend store & artifacts
+```
 
 ---
 
-## Tech Stack
+# Evaluation Metrics
 
-- Python
-- scikit-learn / PyTorch
-- Airflow
-- MLflow
-- FastAPI
-- Docker and Docker Compose
-- Nginx
-- Prometheus and Grafana
-- Evidently
-- DVC
-- uv
-- GitHub Actions
+Primary metric:
+- RMSLE (official Solafune metric)
+
+Additional metrics:
+- MAE
+- R²
+
+All metrics are logged in MLflow.
 
 ---
 
-## Notes
+# Monitoring
 
-Kubernetes is intentionally not used to keep the architecture lightweight and focused on core MLOps concepts.
-The system is designed to be Kubernetes-ready, but Docker Compose and Nginx are sufficient for the project scope.
-
-The goal is not to maximize leaderboard performance, but to demonstrate a clean, maintainable, and production-oriented MLOps architecture.
+- Prometheus scrapes API metrics
+- Grafana provides dashboards
+- Accessible via `/grafana` behind Nginx
 
 ---
 
-## License
+# Deployment
 
-This project is for educational and demonstration purposes.
+Development:
+
+```bash
+docker compose -f deployments/compose.yaml -f deployments/compose.dev.yaml up
+```
+
+Production:
+
+```bash
+docker compose -f deployments/compose.yaml up -d
+```
+
+Environment variables managed via `.env`.
+
+---
+
+# Key MLOps Capabilities
+
+- Versioned configuration system
+- Model registry with aliasing
+- Automated promotion logic
+- Immediate model reload
+- Data versioning with DVC
+- Containerized microservices
+- Observability stack
+- Clear separation of concerns
+
+---
+
+This project demonstrates a clean, maintainable, production-oriented MLOps architecture, 
+designed for internal ML platform usage rather than leaderboard optimization.
+""", language="markdown")

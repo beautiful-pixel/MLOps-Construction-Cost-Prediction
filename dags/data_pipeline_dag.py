@@ -27,6 +27,7 @@ from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.models import Variable
 from airflow.exceptions import AirflowNotFoundException
+from airflow.exceptions import AirflowSkipException
 
 
 logger = logging.getLogger(__name__)
@@ -109,7 +110,14 @@ def data_pipeline():
 
     @task
     def ingestion_task() -> dict:
-        return ingest_incoming_files()
+        metrics = ingest_incoming_files()
+        if metrics is None:
+            # _READY may have been created without actual files.
+            # Ensure we don't leave the incoming folder locked.
+            clean_incoming()
+            raise AirflowSkipException("No files to ingest in incoming.")
+
+        return metrics
 
     @task
     def version_raw_task(ingestion_metrics: dict) -> dict:
@@ -140,8 +148,8 @@ def data_pipeline():
             "current_master_rows": current_master_rows,
         }
 
-    @task
-    def validate_and_clean_incoming_task(metrics: dict) -> dict:
+    @task(trigger_rule="all_done")
+    def validate_and_clean_incoming_task(metrics: dict | None) -> dict | None:
 
         clean_incoming()
 

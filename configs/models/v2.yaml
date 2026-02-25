@@ -1,8 +1,0 @@
-model:
-  params:
-    learning_rate: 0.05
-    max_depth: 4
-    n_estimators: 300
-    random_state: 42
-  type: gradient_boosting
-version: 2

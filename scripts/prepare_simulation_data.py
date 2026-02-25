@@ -1,11 +1,17 @@
 """
 Prepare simulation environment with optional linked images.
 
+    # Ensure image filename columns exist so downstream validation
+    # sees the expected schema even when images are disabled.
+    for col in IMAGE_COLUMNS:
+        if col not in batch_df.columns:
+            batch_df[col] = pd.NA
 - Split full tabular dataset into yearly batches
 - First batch contains N early years (configurable)
-- Remaining batches contain one year each
-- Optionally move or copy referenced images into each batch
-"""
+        for col in IMAGE_COLUMNS:
+            # Force-create the columns so downstream preprocessing never
+            # tries to resolve stale filenames.
+            batch_df[col] = pd.NA
 
 import argparse
 import sys
@@ -83,11 +89,16 @@ def create_batch(
 
     batch_df = batch_df.copy()
 
+    # Ensure image filename columns exist so downstream validation
+    # sees the expected schema even when images are disabled.
+    for col in IMAGE_COLUMNS:
+        if col not in batch_df.columns:
+            batch_df[col] = pd.NA
+
     # Case 1: images disabled → set all image columns to NA
     if not with_images:
         for col in IMAGE_COLUMNS:
-            if col in batch_df.columns:
-                batch_df[col] = pd.NA
+            batch_df[col] = pd.NA
 
     # Case 2: images enabled
     else:

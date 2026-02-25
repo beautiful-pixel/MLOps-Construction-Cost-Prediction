@@ -12,6 +12,8 @@ x-airflow-env: &airflow-env
   REPO_ROOT: ${AIRFLOW_PROJECT_ROOT}
   CONFIG_ROOT: ${AIRFLOW_PROJECT_ROOT}/configs
   DATA_ROOT: ${AIRFLOW_PROJECT_ROOT}/data
+  INFERENCE_API_URL: ${INFERENCE_API_URL:-http://inference-api:8000}
+  INFERENCE_INTERNAL_TOKEN: ${INFERENCE_INTERNAL_TOKEN:-dev-internal-token}
 
 
 x-airflow-common: &airflow-common
