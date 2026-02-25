@@ -79,3 +79,15 @@ k8s/oracle/03-secrets.yaml
 __pycache__/
 *.pyc
 
+# Server-specific overlays and local build scripts
+k8s/oracle/overlays/existing-storage/
+k8s/oracle/overlays/hostpath-home-apps/
+k8s/oracle/overlays/hostpath-home-apps-local-registry/
+k8s/oracle/overlays/hostpath-home-local-registry/
+k8s/oracle/overlays/local-path-apps/
+k8s/oracle/overlays/local-path-apps-local-registry/
+k8s/oracle/overlays/local-path-local-registry/
+scripts/build_and_push_local_registry.sh
+scripts/build_k3s_images_local.sh
+scripts/run_local_registry.sh
+scripts/setup_k3s_local_registry.sh
