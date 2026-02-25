@@ -12,7 +12,7 @@ st.title("MLOps Platform Overview")
 st.markdown(
     """
     End-to-end machine learning operations platform for
-    **Construction Cost Prediction** (USD per m²).
+    **Construction Cost Prediction** (USD per m2).
     Built with versioned pipelines, experiment tracking,
     and automated model promotion.
     """
@@ -20,10 +20,9 @@ st.markdown(
 
 # ── Section 1: Project Structure ──────────────────────────────
 
-st.header("1. Project Structure")
-
-st.code(
-    r"""
+with st.expander("1. Project Structure", expanded=False):
+    st.code(
+        r"""
 mlops-project/
 |
 |-- api/                           # FastAPI microservices
@@ -129,8 +128,8 @@ mlops-project/
 |-- tests/                         #  Unit + integration tests
 +-- mlflow_server/                 #  MLflow DB + artifacts
 """,
-    language=None,
-)
+        language=None,
+    )
 
 
 # ── Platform Services Topology ───────────────────────────────
@@ -140,7 +139,7 @@ st.subheader("Platform Services (High-Level)")
 st.graphviz_chart(
     r"""
     digraph services_topology {
-        rankdir=TB
+        rankdir=LR
         node [shape=box style="rounded,filled"
               fontname="Helvetica" fontsize=11]
         edge [fontname="Helvetica" fontsize=9]
@@ -166,7 +165,7 @@ st.graphviz_chart(
         gateway -> inference [label="Predict"]
 
         inference -> mlflow [label="Load prod model" style=dashed]
-        airflow -> mlflow   [label="Log & register model"]
+        airflow -> mlflow   [label="Log \& register model"]
         airflow -> inference [label="Reload after promote" style=dashed]
 
         mlflow -> postgres
@@ -176,26 +175,20 @@ st.graphviz_chart(
         grafana -> prometheus
     }
     """,
-    use_container_width=True,
+    use_container_width=False,
 )
 
 
 # ── Section 2: Pipeline Architecture ─────────────────────────
 
-st.header("2. Pipeline Architecture")
+with st.expander("2. Pipeline Architecture", expanded=False):
 
-tab_data, tab_train, tab_retrain = st.tabs(
-    ["Data Pipeline", "Training Pipeline", "Retrain Policy"]
-)
-
-with tab_data:
     st.subheader("Data Pipeline DAG")
-    st.markdown("Triggered when new CSV / GeoTIFF files arrive in `data/incoming/`.")
-
+    st.caption("Triggered when new CSV / GeoTIFF files arrive in `data/incoming/`")
     st.graphviz_chart(
         """
         digraph data_pipeline {
-            rankdir=TB
+            rankdir=LR
             node [shape=box style="rounded,filled" fillcolor="#e8f4fd"
                   fontname="Helvetica" fontsize=11]
             edge [fontname="Helvetica" fontsize=9]
@@ -238,26 +231,14 @@ with tab_data:
         use_container_width=True,
     )
 
-    st.markdown(
-        """
-        **Key steps:**
-        - **check_incoming** -- file-based lock prevents concurrent runs
-        - **ingestion** -- detects CSV and GeoTIFF, creates timestamped batch
-        - **preprocess** -- validates against data contract (types, ranges,
-          regex, primary key), deduplicates, merges into `master.parquet`
-        - **version** -- DVC snapshots for raw batch, master, and images
-        - **clean_incoming** -- removes processed files from landing zone
-        """
-    )
+    st.divider()
 
-with tab_train:
     st.subheader("Training Pipeline DAG")
-    st.markdown("Triggered manually or by the retrain policy.")
-
+    st.caption("Triggered manually or by the retrain policy")
     st.graphviz_chart(
         """
         digraph train_pipeline {
-            rankdir=TB
+            rankdir=LR
             node [shape=box style="rounded,filled" fillcolor="#e8f0fe"
                   fontname="Helvetica" fontsize=11]
             edge [fontname="Helvetica" fontsize=9]
@@ -269,13 +250,13 @@ with tab_train:
                 fontname="Helvetica"
                 fontsize=12
 
-                resolve [label="resolve_config\\n(feature / model / split\\nversion selection)"]
-                mlflow_run [label="start_mlflow_run\\n(create experiment run)"]
-                split [label="split_data\\n(geographic strategy:\\nJapan + Philippines = test)"]
+                resolve [label="resolve_config\\n(version selection)"]
+                mlflow_run [label="start_mlflow_run\\n(create experiment)"]
+                split [label="split_data\\n(geographic strategy)"]
                 ver_splits [label="version_splits\\n(DVC snapshot)"]
-                train [label="train_model\\n(sklearn Pipeline:\\npreprocessor + regressor)"]
-                evaluate [label="evaluate_model\\n(RMSLE / MAE / R2\\non frozen reference set)"]
-                promote [label="promote_model\\n(compare vs production,\\nauto-promote if better)"]
+                train [label="train_model\\n(sklearn Pipeline)"]
+                evaluate [label="evaluate_model\\n(RMSLE / MAE / R2)"]
+                promote [label="promote_model\\n(auto if better)"]
 
                 resolve -> mlflow_run
                 mlflow_run -> split
@@ -289,11 +270,11 @@ with tab_train:
                     fillcolor="#d4edda"]
             mlflow [shape=component label="MLflow\\n(registry)"
                     fillcolor="#fce4ec"]
-            prod   [shape=star label="Production\\nModel"
-                    fillcolor="#fff9c4" style=filled]
+            prod   [shape=box label="Production\\nModel"
+                    fillcolor="#fff9c4" style="rounded,filled"]
 
             master -> split [style=dashed label="load"]
-            train -> mlflow [style=dashed label="log metrics\\n& artifacts"]
+            train -> mlflow [style=dashed label="log metrics"]
             promote -> mlflow [style=dashed label="set alias"]
             promote -> prod [style=dashed label="if improved"]
         }
@@ -301,30 +282,14 @@ with tab_train:
         use_container_width=True,
     )
 
-    st.markdown(
-        """
-        **Key steps:**
-        - **resolve_config** -- reads `active_config.yaml`, supports
-          runtime override via Airflow conf
-        - **split_data** -- geographic split (Japan & Philippines as
-          test localities); frozen reference set (2019-2020)
-        - **train_model** -- builds sklearn Pipeline
-          (median imputation, clipping, encoding + GradientBoosting)
-        - **evaluate_model** -- RMSLE (primary), MAE, R2 on frozen
-          reference test set
-        - **promote_model** -- compares candidate vs current production;
-          promotes if RMSLE improves
-        """
-    )
+    st.divider()
 
-with tab_retrain:
     st.subheader("Retrain Policy DAG")
-    st.markdown("Scheduled check for data growth; auto-triggers training.")
-
+    st.caption("Scheduled check for data growth; auto-triggers training")
     st.graphviz_chart(
         """
         digraph retrain_policy {
-            rankdir=TB
+            rankdir=LR
             node [shape=box style="rounded,filled" fillcolor="#f3e5f5"
                   fontname="Helvetica" fontsize=11]
             edge [fontname="Helvetica" fontsize=9]
@@ -361,174 +326,153 @@ with tab_retrain:
         use_container_width=True,
     )
 
-    st.markdown(
-        """
-        **Key steps:**
-        - Retrieves current production model run config from MLflow
-        - Counts rows in `master.parquet` vs last training run
-        - If new rows exceed threshold (default 10), triggers training
-        - Sends Slack notification with data growth summary
-        """
-    )
-
 
 # ── Section 3: Inference Flow ────────────────────────────────
 
-st.header("3. Inference Flow")
+with st.expander("3. Inference Flow", expanded=False):
+    st.graphviz_chart(
+        """
+        digraph inference_flow {
+            rankdir=LR
+            node [shape=box style="rounded,filled"
+                  fontname="Helvetica" fontsize=11]
+            edge [fontname="Helvetica" fontsize=9]
 
-st.graphviz_chart(
-    """
-    digraph inference_flow {
-        rankdir=LR
-        node [shape=box style="rounded,filled"
-              fontname="Helvetica" fontsize=11]
-        edge [fontname="Helvetica" fontsize=9]
+            browser [label="Browser" shape=ellipse fillcolor="#fff9c4"]
+            nginx   [label="Nginx\\n(HTTPS)" fillcolor="#e0e0e0"]
+            sl      [label="Streamlit\\n(form UI)" fillcolor="#e8f4fd"]
+            gw      [label="Gateway API\\n(auth + proxy)" fillcolor="#e8f0fe"]
+            inf     [label="Inference API\\n(model predict)" fillcolor="#c8e6c9"]
+            mlflow  [label="MLflow\\n(load prod model)" fillcolor="#fce4ec"]
+            result  [label="Prediction\\n(USD / m2)" shape=ellipse fillcolor="#fff9c4"]
 
-        browser [label="Browser" shape=ellipse fillcolor="#fff9c4"]
-        nginx   [label="Nginx\\n(HTTPS)" fillcolor="#e0e0e0"]
-        sl      [label="Streamlit\\n(form UI)" fillcolor="#e8f4fd"]
-        gw      [label="Gateway API\\n(auth + proxy)" fillcolor="#e8f0fe"]
-        inf     [label="Inference API\\n(model predict)" fillcolor="#c8e6c9"]
-        mlflow  [label="MLflow\\n(load prod model)" fillcolor="#fce4ec"]
-        result  [label="Prediction\\n(USD / m2)" shape=ellipse fillcolor="#fff9c4"]
-
-        browser -> nginx [label="HTTPS"]
-        nginx -> sl [label="port 8501"]
-        sl -> gw [label="POST /predict"]
-        gw -> inf [label="internal token"]
-        inf -> mlflow [label="load model\\n(startup)" style=dashed]
-        inf -> result [label="return"]
-        result -> browser [style=dashed]
-    }
-    """,
-    use_container_width=True,
-)
+            browser -> nginx [label="HTTPS"]
+            nginx -> sl [label="port 8501"]
+            sl -> gw [label="POST /predict"]
+            gw -> inf [label="internal token"]
+            inf -> mlflow [label="load model\\n(startup)" style=dashed]
+            inf -> result [label="return"]
+            result -> browser [style=dashed]
+        }
+        """,
+        use_container_width=True,
+    )
 
 
 # ── Section 4: Deployment Architecture ───────────────────────
 
-st.header("4. Deployment Architecture")
+with st.expander("4. Deployment Architecture", expanded=False):
+    st.subheader("K3s Cluster Topology (Single Node)")
 
-st.subheader("K3s Cluster Topology (Single Node)")
+    st.graphviz_chart(
+        """
+        digraph deployment {
+            rankdir=LR
+            compound=true
+            node [shape=box style="rounded,filled"
+                  fontname="Helvetica" fontsize=10]
+            edge [fontname="Helvetica" fontsize=9]
 
-st.graphviz_chart(
-    """
-    digraph deployment {
-        rankdir=TB
-        compound=true
-        node [shape=box style="rounded,filled"
-              fontname="Helvetica" fontsize=10]
-        edge [fontname="Helvetica" fontsize=9]
+            subgraph cluster_nginx {
+                label="Nginx Reverse Proxy (HTTPS)"
+                style=filled
+                color="#e0e0e0"
+                fillcolor="#f5f5f5"
+                fontname="Helvetica"
 
-        subgraph cluster_nginx {
-            label="Nginx Reverse Proxy (HTTPS)"
-            style=filled
-            color="#e0e0e0"
-            fillcolor="#f5f5f5"
-            fontname="Helvetica"
-
-            nginx [label="engineerai.space\\n(Let's Encrypt SSL)"
-                   fillcolor="#e0e0e0"]
-        }
-
-        subgraph cluster_k3s {
-            label="K3s Cluster  |  namespace: mlops"
-            style=filled
-            color="#1565c0"
-            fillcolor="#e3f2fd"
-            fontname="Helvetica"
-            fontsize=12
-
-            subgraph cluster_nodeport {
-                label="NodePort Services (external)"
-                style=dashed
-                color="#1976d2"
-
-                gw   [label="Gateway API\\n:8080 -> :30080"
-                      fillcolor="#bbdefb"]
-                sl_k [label="Streamlit\\n:8501 -> :30501"
-                      fillcolor="#bbdefb"]
-                gf   [label="Grafana\\n:3000 -> :30300"
-                      fillcolor="#bbdefb"]
+                nginx [label="engineerai.space\\n(Let's Encrypt SSL)"
+                       fillcolor="#e0e0e0"]
             }
 
-            subgraph cluster_clusterip {
-                label="ClusterIP Services (internal)"
-                style=dashed
-                color="#42a5f5"
+            subgraph cluster_k3s {
+                label="K3s Cluster  |  namespace: mlops"
+                style=filled
+                color="#1565c0"
+                fillcolor="#e3f2fd"
+                fontname="Helvetica"
+                fontsize=12
 
-                mlf  [label="MLflow\\n:5000"   fillcolor="#c8e6c9"]
-                af_w [label="Airflow Web\\n:8080" fillcolor="#c8e6c9"]
-                af_s [label="Airflow Sched"    fillcolor="#c8e6c9"]
-                inf  [label="Inference API\\n:8000" fillcolor="#c8e6c9"]
-                pg   [label="PostgreSQL\\n:5432" fillcolor="#c8e6c9"]
-                prom [label="Prometheus\\n:9090" fillcolor="#c8e6c9"]
+                subgraph cluster_nodeport {
+                    label="NodePort Services (external)"
+                    style=dashed
+                    color="#1976d2"
+
+                    gw   [label="Gateway API\\n:8080 -> :30080"
+                          fillcolor="#bbdefb"]
+                    sl_k [label="Streamlit\\n:8501 -> :30501"
+                          fillcolor="#bbdefb"]
+                    gf   [label="Grafana\\n:3000 -> :30300"
+                          fillcolor="#bbdefb"]
+                }
+
+                subgraph cluster_clusterip {
+                    label="ClusterIP Services (internal)"
+                    style=dashed
+                    color="#42a5f5"
+
+                    mlf  [label="MLflow\\n:5000"   fillcolor="#c8e6c9"]
+                    af_w [label="Airflow Web\\n:8080" fillcolor="#c8e6c9"]
+                    af_s [label="Airflow Sched"    fillcolor="#c8e6c9"]
+                    inf  [label="Inference API\\n:8000" fillcolor="#c8e6c9"]
+                    pg   [label="PostgreSQL\\n:5432" fillcolor="#c8e6c9"]
+                    prom [label="Prometheus\\n:9090" fillcolor="#c8e6c9"]
+                }
+
+                subgraph cluster_storage {
+                    label="Persistent Volumes"
+                    style=dashed
+                    color="#66bb6a"
+
+                    pv_proj [label="project-pv  5Gi RWX\\n(shared data/configs)"
+                             shape=folder fillcolor="#dcedc8"]
+                    pv_pg   [label="postgres-pv  2Gi"
+                             shape=folder fillcolor="#dcedc8"]
+                    pv_mlf  [label="mlflow-pv  2Gi"
+                             shape=folder fillcolor="#dcedc8"]
+                    pv_af   [label="airflow-pv  2Gi"
+                             shape=folder fillcolor="#dcedc8"]
+                    pv_prom [label="prometheus-pv  2Gi"
+                             shape=folder fillcolor="#dcedc8"]
+                    pv_gf   [label="grafana-pv  1Gi"
+                             shape=folder fillcolor="#dcedc8"]
+                }
             }
 
-            subgraph cluster_storage {
-                label="Persistent Volumes"
-                style=dashed
-                color="#66bb6a"
 
-                pv_proj [label="project-pv  5Gi RWX\\n(shared data/configs)"
-                         shape=folder fillcolor="#dcedc8"]
-                pv_pg   [label="postgres-pv  2Gi"
-                         shape=folder fillcolor="#dcedc8"]
-                pv_mlf  [label="mlflow-pv  2Gi"
-                         shape=folder fillcolor="#dcedc8"]
-                pv_af   [label="airflow-pv  2Gi"
-                         shape=folder fillcolor="#dcedc8"]
-                pv_prom [label="prometheus-pv  2Gi"
-                         shape=folder fillcolor="#dcedc8"]
-                pv_gf   [label="grafana-pv  1Gi"
-                         shape=folder fillcolor="#dcedc8"]
-            }
+            // Nginx routing
+            nginx -> sl_k  [label="/  (port 30501)"]
+            nginx -> gw     [label="/api/*  (port 30080)"]
+            nginx -> gf     [label="/grafana/*  (port 30300)"]
+
+            // Internal communication
+            gw -> mlf  [label="experiments"]
+            gw -> af_w [label="DAG mgmt"]
+            gw -> inf  [label="predict"]
+            af_s -> pg [label="metadata"]
+            inf -> mlf [label="load model" style=dashed]
+            prom -> gw [label="scrape /metrics" style=dashed]
+            prom -> inf [label="scrape /metrics" style=dashed]
+            gf -> prom [label="query"]
+
+            // Storage bindings
+            pg -> pv_pg [style=dotted arrowhead=none]
+            mlf -> pv_mlf [style=dotted arrowhead=none]
+            af_s -> pv_af [style=dotted arrowhead=none]
+            af_w -> pv_af [style=dotted arrowhead=none]
+            gw -> pv_proj [style=dotted arrowhead=none label="configs"]
+            prom -> pv_prom [style=dotted arrowhead=none]
+            gf -> pv_gf [style=dotted arrowhead=none]
         }
-
-        subgraph cluster_standalone {
-            label="Standalone Service"
-            style=dashed
-            color="#ff9800"
-
-            sl_ext [label="Streamlit\\n(systemd :8501)"
-                    fillcolor="#ffe0b2"]
-        }
-
-        // Nginx routing
-        nginx -> sl_ext [label="/  (port 8501)"]
-        nginx -> gw     [label="/api/*  (port 30080)"]
-        nginx -> gf     [label="/grafana/*  (port 30300)"]
-
-        // Internal communication
-        gw -> mlf  [label="experiments"]
-        gw -> af_w [label="DAG mgmt"]
-        gw -> inf  [label="predict"]
-        af_s -> pg [label="metadata"]
-        inf -> mlf [label="load model" style=dashed]
-        prom -> gw [label="scrape /metrics" style=dashed]
-        prom -> inf [label="scrape /metrics" style=dashed]
-        gf -> prom [label="query"]
-
-        // Storage bindings
-        pg -> pv_pg [style=dotted arrowhead=none]
-        mlf -> pv_mlf [style=dotted arrowhead=none]
-        af_s -> pv_af [style=dotted arrowhead=none]
-        af_w -> pv_af [style=dotted arrowhead=none]
-        gw -> pv_proj [style=dotted arrowhead=none label="configs"]
-        prom -> pv_prom [style=dotted arrowhead=none]
-        gf -> pv_gf [style=dotted arrowhead=none]
-    }
-    """,
-    use_container_width=True,
-)
+        """,
+        use_container_width=True,
+    )
 
 
 # ── Section 5: Service Status Table ──────────────────────────
 
-st.header("5. Service Summary")
-
-st.markdown(
-    """
+with st.expander("5. Service Summary", expanded=False):
+    st.markdown(
+        """
 | Service | Port | Type | Role |
 |---------|------|------|------|
 | **Gateway API** | 8080 / 30080 | NodePort | Unified API gateway (auth, proxy) |
@@ -540,95 +484,92 @@ st.markdown(
 | **Prometheus** | 9090 | ClusterIP | Metrics collection |
 | **Grafana** | 3000 / 30300 | NodePort | Monitoring dashboards |
 | **Streamlit** | 8501 / 30501 | NodePort | Frontend dashboard |
-| **Streamlit (standalone)** | 8501 | systemd | External-facing UI via Nginx |
-    """
-)
+        """
+    )
 
 
 # ── Section 6: Technology Stack ──────────────────────────────
 
-st.header("6. Technology Stack")
+with st.expander("6. Technology Stack", expanded=False):
+    col1, col2, col3 = st.columns(3)
 
-col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(
+            """
+            **ML & Data**
+            - scikit-learn (GradientBoosting)
+            - pandas / numpy
+            - DVC (data versioning)
+            - Parquet (storage format)
+            """
+        )
 
-with col1:
-    st.markdown(
-        """
-        **ML & Data**
-        - scikit-learn (GradientBoosting)
-        - pandas / numpy
-        - DVC (data versioning)
-        - Parquet (storage format)
-        """
-    )
+    with col2:
+        st.markdown(
+            """
+            **Platform**
+            - MLflow (tracking + registry)
+            - Apache Airflow (orchestration)
+            - FastAPI (microservices)
+            - Streamlit (dashboard)
+            """
+        )
 
-with col2:
-    st.markdown(
-        """
-        **Platform**
-        - MLflow (tracking + registry)
-        - Apache Airflow (orchestration)
-        - FastAPI (microservices)
-        - Streamlit (dashboard)
-        """
-    )
-
-with col3:
-    st.markdown(
-        """
-        **Infrastructure**
-        - K3s (Kubernetes)
-        - Docker (containers)
-        - PostgreSQL (metadata)
-        - Prometheus + Grafana
-        - Nginx (reverse proxy + SSL)
-        """
-    )
+    with col3:
+        st.markdown(
+            """
+            **Infrastructure**
+            - K3s (Kubernetes)
+            - Docker (containers)
+            - PostgreSQL (metadata)
+            - Prometheus + Grafana
+            - Nginx (reverse proxy + SSL)
+            """
+        )
 
 
 # ── Section 7: Configuration Strategy ────────────────────────
 
-st.header("7. Configuration Strategy")
+with st.expander("7. Configuration Strategy", expanded=False):
+    st.markdown(
+        """
+        All ML strategies are managed through **versioned YAML files**
+        under `configs/`. The active version is selected in
+        `active_config.yaml` and can be overridden at training time.
+        """
+    )
 
-st.markdown(
-    """
-    All ML strategies are managed through **versioned YAML files**
-    under `configs/`. The active version is selected in
-    `active_config.yaml` and can be overridden at training time.
-    """
-)
+    st.graphviz_chart(
+        """
+        digraph config_strategy {
+            rankdir=LR
+            node [shape=note style=filled fillcolor="#fff9c4"
+                  fontname="Helvetica" fontsize=10]
+            edge [fontname="Helvetica" fontsize=9]
 
-st.graphviz_chart(
-    """
-    digraph config_strategy {
-        rankdir=LR
-        node [shape=note style=filled fillcolor="#fff9c4"
-              fontname="Helvetica" fontsize=10]
-        edge [fontname="Helvetica" fontsize=9]
+            active [label="active_config.yaml\\n(version selector)"
+                    fillcolor="#ffe0b2"]
+            feat [label="features/\\nv1.yaml  v2.yaml"]
+            model [label="models/\\nv1.yaml  v2.yaml"]
+            split [label="splits/\\nv1.yaml"]
+            contract [label="data_contracts/\\nv1.yaml"]
 
-        active [label="active_config.yaml\\n(version selector)"
-                fillcolor="#ffe0b2"]
-        feat [label="features/\\nv1.yaml  v2.yaml"]
-        model [label="models/\\nv1.yaml  v2.yaml"]
-        split [label="splits/\\nv1.yaml"]
-        contract [label="data_contracts/\\nv1.yaml"]
+            active -> feat [label="feature_version"]
+            active -> model [label="model_version"]
+            active -> split [label="split_version"]
+            active -> contract [label="data_contract_version"]
+        }
+        """,
+        use_container_width=True,
+    )
 
-        active -> feat [label="feature_version"]
-        active -> model [label="model_version"]
-        active -> split [label="split_version"]
-        active -> contract [label="data_contract_version"]
-    }
-    """,
-    use_container_width=True,
-)
-
-st.markdown(
-    """
-    | Config | Current | Description |
-    |--------|---------|-------------|
-    | **Features** | v1 (12 tabular features), v2 (6 features, one-hot encoding) | Feature selection and encoding |
-    | **Models** | v1 (GB 200 trees), v2 (GB 300 trees) | Algorithm and hyperparameters |
-    | **Splits** | v1 (geographic: Japan + Philippines test) | Train/test split strategy |
-    | **Data Contract** | v1 (30+ columns, types, ranges, regex) | Schema validation rules |
-    """
-)
+    st.markdown(
+        """
+        | Config | Current | Description |
+        |--------|---------|-------------|
+        | **Features** | v1 (12 tabular features), v2 (6 features, one-hot encoding) | Feature selection and encoding |
+        | **Models** | v1 (GB 200 trees), v2 (GB 300 trees) | Algorithm and hyperparameters |
+        | **Splits** | v1 (geographic: Japan + Philippines test) | Train/test split strategy |
+        | **Data Contract** | v1 (30+ columns, types, ranges, regex) | Schema validation rules |
+        """
+    )

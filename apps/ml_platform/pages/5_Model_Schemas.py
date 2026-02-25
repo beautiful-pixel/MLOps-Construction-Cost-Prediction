@@ -149,7 +149,16 @@ existing_value = st.session_state.model_builder.get(
 
 # Parameter input
 
-if param_type == "int":
+if existing_value is None and param_type in ("int", "float", "NoneType"):
+    value = st.text_input("Value", value="", help="Leave empty for None")
+    if value.strip() == "":
+        value = None
+    elif param_type == "int":
+        value = int(value)
+    elif param_type == "float":
+        value = float(value)
+
+elif param_type == "int":
     value = st.number_input(
         "Value",
         value=int(existing_value),
@@ -166,13 +175,13 @@ elif param_type == "float":
 elif param_type == "bool":
     value = st.checkbox(
         "Value",
-        value=bool(existing_value),
+        value=bool(existing_value) if existing_value is not None else False,
     )
 
 else:
     value = st.text_input(
         "Value",
-        value=str(existing_value),
+        value=str(existing_value) if existing_value is not None else "",
     )
 
 
