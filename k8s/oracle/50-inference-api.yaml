@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-api
+spec:
+  selector:
+    app: inference-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-api
+  template:
+    metadata:
+      labels:
+        app: inference-api
+    spec:
+      containers:
+        - name: inference-api
+          image: REPLACE_ME/mlops-inference-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: INFERENCE_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: INFERENCE_INTERNAL_TOKEN
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+            - name: MLFLOW_MODEL_NAME
+              value: construction_cost_model
+            - name: CONFIG_ROOT
+              value: /opt/project/configs
+            - name: DATA_ROOT
+              value: /opt/project/data
+            - name: API_TITLE
+              value: Solafune Inference API
+          volumeMounts:
+            - name: mlflow-artifacts
+              mountPath: /mlflow_artifacts
+            - name: project
+              mountPath: /opt/project
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: mlflow-artifacts
+          persistentVolumeClaim:
+            claimName: mlflow-artifacts-pvc
+        - name: project
+          persistentVolumeClaim:
+            claimName: project-pvc
