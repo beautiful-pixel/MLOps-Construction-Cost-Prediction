@@ -41,8 +41,6 @@ The system is structured around clearly separated responsibilities:
 🟢 **Training Layer** → Airflow, MLflow, PostgreSQL  
 🟠 **Monitoring Layer** → Prometheus, Grafana
 
-## High-Level Service Diagram
-
 ```mermaid
 %%{init: {'theme':'base'}}%%
 flowchart TB
@@ -94,12 +92,8 @@ flowchart TB
 
 # Live Deployment
 
-# Live Deployment
-
 The platform is deployed on an Oracle Cloud server and orchestrated with Kubernetes.  
-It is publicly accessible at:
-
-https://engineerai.space
+It is publicly accessible at https://engineerai.space
 
 The following routes are exposed:
 
@@ -227,7 +221,7 @@ All metrics are logged in MLflow.
 
 ---
 
-# Deployment
+# Running the Platform
 
 Development:
 
@@ -247,14 +241,23 @@ Environment variables managed via `.env`.
 
 # Key MLOps Capabilities
 
-- Versioned configuration system
-- Model registry with aliasing
-- Automated promotion logic
-- Immediate model reload
-- Data versioning with DVC
-- Containerized microservices
-- Observability stack
-- Clear separation of concerns
+- **End-to-end orchestration with Airflow**  
+  Automated ingestion → preprocessing → splitting → training → evaluation → promotion → serving reload.
+
+- **Full lineage & reproducible training**  
+  DVC versioning (raw, master, splits, reference tests) combined with MLflow tracking and Model Registry (`prod` alias), ensuring deterministic runs and comparable experiments.
+
+- **Strict, versioned configuration system**  
+  YAML-based data contracts, feature schemas, model definitions, split strategies, and runtime defaults.
+
+- **Data-driven retraining policy**  
+  Automatic retrain trigger based on master dataset growth threshold.
+
+- **Secure microservice architecture**  
+  Gateway control plane, isolated inference service, Streamlit frontend, Nginx reverse proxy.
+
+- **Production-grade deployment & observability**  
+  Docker & Kubernetes deployment, Prometheus monitoring, Grafana dashboards, Slack notifications, CI automation.
 
 ---
 
