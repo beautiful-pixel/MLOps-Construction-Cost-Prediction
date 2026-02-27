@@ -1,34 +1,12 @@
 # MLOps Platform – Construction Cost Prediction
 
-This project implements an end-to-end MLOps platform for the Solafune Construction Cost Prediction challenge.
+This project implements an end-to-end MLOps platform built for the Solafune Construction Cost Prediction challenge.
 
-The current production baseline is tabular-only.  
-Image ingestion, validation and versioning are implemented to prepare for future multimodal modeling.
+The primary machine learning objective is to predict regional construction costs using a tabular baseline, while preparing the platform for future multimodal modeling with satellite imagery.
 
-The objective is not only model performance, but the design of a reproducible, modular, production-oriented ML system covering the full lifecycle:
+Beyond model performance, the core goal is to design a reproducible, modular, production-oriented ML system covering the full lifecycle:
+
 data ingestion → validation → training → promotion → serving → monitoring.
-
----
-
-# Project Objectives
-
-## Machine Learning
-
-- Predict regional construction costs (tabular baseline)
-- Prepare multimodal learning (satellite imagery pipeline ready)
-- Track experiments reproducibly
-
-## MLOps
-
-- Modular microservice architecture
-- Versioned configurations (feature / model / split)
-- Data versioning with DVC
-- Experiment tracking with MLflow
-- Orchestrated pipelines with Airflow
-- Secure model serving via FastAPI
-- Reverse proxy entrypoint (Nginx)
-- Monitoring with Prometheus & Grafana
-- CI & automated testing
 
 ---
 
