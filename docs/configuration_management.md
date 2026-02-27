@@ -2,285 +2,385 @@
 
 ## 1. Overview
 
-The project is configuration-driven.
+The project is fully configuration-driven.
 
-All structural rules, feature definitions, dataset splits and model
-parameters are defined in versioned YAML configuration files.
+All structural rules, feature definitions, dataset splitting strategies, and model hyperparameters are defined in immutable, versioned YAML files.
 
-Pipeline modules do not hardcode configuration values.
+Configuration families are stored under:
 
-Each configuration family is independently versioned and resolved
-at orchestration level.
+    configs/
+        data_contracts/
+        features/
+        splits/
+        models/
 
----
+Each configuration family:
 
-## 2. Active Configuration
+- Is independently versioned
+- Is immutable once released
+- Is strictly validated by dedicated Python modules
+- Contains no filesystem paths
+- Is fully decoupled from environment variables
+- Is resolved at orchestration level
 
-The active configuration defines which version of each configuration
-family is used during execution.
+The active configuration only resolves version numbers:
 
-Example:
-
+```yaml
 data_contract_version: 1
-
 training_defaults:
-  feature_version: 1
-  split_version: 1
+  feature_version: 2
   model_version: 1
+  split_version: 1
+```
 
 The active configuration:
-
 - Does not define logic
 - Does not define schema
 - Does not define transformations
-
-It only resolves versions.
-
-Version resolution is performed at orchestration level and passed
-explicitly to pipeline components.
+- Only resolves which versions are used during execution
 
 ---
 
-## 3. Configuration Families
+# 2. Data Contract
 
-The project defines four configuration families:
+## 2.1 Purpose
 
-- Data Contract
-- Feature Configuration
-- Split Configuration
-- Model Configuration
+The Data Contract defines the structural integrity of the master dataset.
 
-Each family is versioned independently.
-
-Configurations are stored under:
-
-configs/
-    data_contracts/
-    features/
-    splits/
-    models/
-
-Each version file is immutable once created.
-
-# Data Contract
-
-## 1. Purpose
-
-The data contract defines the structural integrity of the dataset.
-
-It acts as the single source of truth for:
+It is the single source of truth for:
 
 - Dataset schema
 - Column constraints
-- External file linkage
 - Primary key enforcement
-- Deduplication behavior
+- Deduplication rules
+- External file linkage
+- Target definition
 
-All incoming data must strictly comply with the active data contract.
-
+All incoming data must strictly comply with the active data contract.  
 If validation fails, the pipeline stops immediately.
 
 ---
 
-## 2. High-Level Structure
+## 2.2 High-Level Structure
 
-A data contract YAML file contains the following top-level fields:
+Example:
 
-version
-tabular_extensions
-image_extensions
-columns
-primary_key
-deduplication
-
-Example (simplified):
-
+```yaml
 version: 1
 
-tabular_extensions:
-  - csv
-
-image_extensions:
-  - tif
+tabular_extensions: ['csv']
+image_extensions: ['tif']
 
 columns:
   data_id:
     type: string
     non_nullable: true
 
+  year:
+    type: int
+    min: 1950
+    max: 2100
+
+  developed_country:
+    type: string
+    allowed_values: ['Yes', 'No']
+
+  sentinel2_tiff_file_name:
+    type: string
+    format: '^sentinel_2_[\w\-]+\.tif$'
+    external_file:
+      type: image
+      name: sentinel2
+      bands: 12
+      height: 1024
+      width: 1024
+
+  construction_cost_per_m2_usd:
+    type: float
+    non_nullable: true
+    min: 0
+
 primary_key:
   - data_id
+
+target: construction_cost_per_m2_usd
 
 deduplication:
   subset:
     - data_id
   keep: last
+```
 
 ---
 
-## 3. Tabular and Image Extensions
+## 2.3 Core Rules
 
-tabular_extensions
+### Structural Validation
 
-Defines which file extensions are accepted during ingestion
-for tabular data.
+- All declared columns must exist
+- No unexpected columns if strict mode is enabled
+- Type enforcement: `int`, `float`, `string`
+- `min` / `max` validation
+- `allowed_values` validation
+- Regex format validation
 
-image_extensions
+### Target
 
-Defines which file extensions are accepted for external files.
+- Mandatory
+- Must exist in `columns`
+- Must be `non_nullable`
+- Cannot be part of the primary key
+- Defined only in the data contract
 
-Any file with an unsupported extension will cause ingestion to fail.
+### Primary Key
 
----
+- No null values allowed
+- No duplicates allowed
+- Strict enforcement
 
-## 4. Column Definitions
+### Deduplication
 
-The columns section defines all allowed columns.
+Used when merging batch data into master:
 
-Each column can define:
-
-type (required)
-non_nullable (optional)
-min (optional)
-max (optional)
-format (optional regex)
-allowed_values (optional list)
-external_file (optional nested definition)
-
-Example:
-
-year:
-  type: int
-  min: 1950
-  max: 2100
-
-This ensures that:
-
-- The column exists
-- The type matches
-- Values fall within the allowed range
-
----
-
-## 5. Column Type
-
-Allowed types:
-
-- string
-- int
-- float
-
-Validation ensures pandas dtype compatibility.
-
----
-
-## 6. Constraints
-
-Optional constraints include:
-
-non_nullable  
-If true, null values are forbidden.
-
-min / max  
-Define numeric bounds.
-
-allowed_values  
-Restrict categorical values.
-
-format  
-Define a regex pattern that values must match exactly.
-
----
-
-## 7. External File Definition
-
-A column may reference an external file.
-
-Example:
-
-sentinel2_tiff_file_name:
-  type: string
-  format: '^sentinel_2_[\w\-]+\.tif$'
-  external_file:
-    type: image
-    name: sentinel2
-    bands: 12
-    height: 1024
-    width: 1024
-
-external_file contains:
-
-type  
-Currently supported: image
-
-name  
-Defines canonical storage namespace.
-
-bands  
-Expected number of channels.
-
-height  
-Expected image height.
-
-width  
-Expected image width.
-
-During preprocessing:
-
-1. Referenced filenames are extracted from the dataframe.
-2. Missing referenced files raise an error.
-3. Unreferenced files raise an error.
-4. Technical validation is performed.
-5. Files are canonicalized under:
-
-data/images/<name>/
-
-6. A derived column <name>_relative_path is added.
-The value represents a path relative to the data/ directory.
-
-This guarantees strict consistency between tabular data and external storage.
-
----
-
-## 8. Primary Key
-
-primary_key defines row-level uniqueness.
-
-Example:
-
-primary_key:
-  - data_id
-
-Validation ensures:
-
-- No null values
-- No duplicates
-
----
-
-## 9. Deduplication Rules
-
-Deduplication is applied when merging batches into master.
-
-Example:
-
+```yaml
 deduplication:
   subset:
     - data_id
   keep: last
+```
 
-subset defines the uniqueness subset.
-keep defines which duplicate is retained.
+### External Files (Images)
+
+Declared via `external_file`.
+
+Enforced rules:
+
+- Referenced files must exist
+- Unreferenced files are rejected
+- Technical validation (bands, height, width)
+- Canonicalization under stable storage
+- Automatic addition of `<name>_relative_path` column
+
+All behavior is fully contract-driven.
 
 ---
 
-## 10. Design Principles
+# 3. Feature Configuration
 
-The data contract is:
+## 3.1 Purpose
 
-- Versioned
-- Immutable once released
-- Strictly enforced
-- Decoupled from pipeline logic
+The Feature Schema defines:
 
-It ensures long-term structural stability of the dataset.
+- Which columns are used as model features
+- Their ML type
+- Imputation strategy
+- Encoding strategy
+- Optional clipping and scaling
+
+It:
+
+- Must reference a data contract
+- Never defines the target
+- Is strictly validated against the data contract
+- Contains only transformation metadata (at the moment; may later include declarative feature engineering such as derived features from image bands).
+
+---
+
+## 3.2 Example
+
+```yaml
+version: 1
+data_contract: 1
+
+tabular_features:
+
+  deflated_gdp_usd:
+    type: numeric
+    impute: median
+
+  developed_country:
+    type: categorical
+    encoding: binary
+    impute: most_frequent
+
+  region_economic_classification:
+    type: categorical
+    encoding: ordinal
+    order:
+      - Low income
+      - Lower-middle income
+      - Upper-middle income
+      - High income
+    impute: most_frequent
+```
+
+---
+
+## 3.3 Core Rules
+
+### Contract Consistency
+
+- All features must exist in the referenced data contract
+- If a column is nullable in the contract → imputation is mandatory
+- Target must not appear in the feature schema
+
+### Supported Feature Types
+
+- `numeric`
+- `categorical`
+
+Supported encodings:
+
+- `binary`
+- `ordinal`
+- `onehot`
+
+### Numeric Features
+
+Support:
+
+- imputation
+- clipping
+- scaling (`standard`, `minmax`)
+
+### Categorical Features
+
+- `binary` → ordinal encoding
+- `ordinal` → ordered encoding with explicit category order
+- `onehot` → one-hot encoding
+
+Strict validation of allowed ordinal values is enforced.
+
+---
+
+# 4. Model Configuration
+
+## 4.1 Purpose
+
+The Model Schema defines:
+
+- Model type
+- Hyperparameters
+
+It does not define:
+- Features
+- Preprocessing
+- Data logic
+
+---
+
+## 4.2 Example
+
+```yaml
+version: 1
+
+model:
+  type: gradient_boosting
+  params:
+    n_estimators: 200
+    learning_rate: 0.05
+    max_depth: 4
+    random_state: 42
+```
+
+---
+
+## 4.3 Supported Models
+
+- gradient_boosting
+- random_forest
+- ridge
+
+Validation guarantees:
+
+- Model type is supported
+- Only valid parameters are allowed
+- No extra keys are permitted
+- Instantiation is deterministic
+
+---
+
+# 5. Split Configuration
+
+## 5.1 Purpose
+
+The Split Schema defines the evaluation strategy.
+
+It guarantees:
+
+- Reproducible dataset splitting
+- Explicit evaluation protocol
+- Frozen reference test sets
+- Clean separation between configuration and split logic
+
+---
+
+## 5.2 Example
+
+```yaml
+version: 1
+data_contract: 1
+
+split_strategy: geographic
+
+geographic_column: geolocation_name
+periodic_column: year
+
+test_localities:
+  - 10000 Gunma
+  - 20000 Nagano
+
+reference_test_period:
+  min: 2019
+  max: 2020
+
+moving_test_period:
+  durations: [1]
+```
+
+---
+
+## 5.3 Geographic Strategy
+
+Implements:
+
+- Train set = data outside `test_localities`
+- Reference test set = selected localities within fixed period
+- Additional moving test sets = recent rolling windows
+
+---
+
+# 6. Design Principles
+
+### Strict Separation of Responsibilities
+
+- Data Contract → dataset structure and target
+- Feature Schema → feature definition and preprocessing metadata
+- Split Schema → evaluation strategy
+- Model Schema → model type and hyperparameters
+
+### Immutability
+
+Once a version is released:
+- It never changes
+- Full reproducibility is guaranteed
+
+### Orchestration-Level Resolution
+
+All version selection is centralized in the active configuration.
+
+Pipeline components only receive resolved version numbers.
+
+---
+
+# 7. End-to-End Execution Flow
+
+1. Validate dataset against Data Contract
+2. Validate Feature Schema consistency
+3. Generate dataset splits
+4. Build preprocessing pipeline
+5. Instantiate model
+6. Train under fully versioned configuration
+
+Each training run is fully reproducible and traceable
+to an explicit set of configuration versions.

@@ -1,7 +1,4 @@
-st.code(r"""
-# MLOps – Construction Cost Prediction
-
-## Solafune Challenge – Industrial ML Platform
+# MLOps Platform – Construction Cost Prediction
 
 This project implements an end-to-end MLOps platform for the Solafune Construction Cost Prediction challenge.
 
@@ -39,10 +36,10 @@ data ingestion → validation → training → promotion → serving → monitor
 
 The system is structured around clearly separated responsibilities:
 
-- <span style="color:#616161;">●</span> Entry Layer → Nginx (HTTPS reverse proxy)
-- <span style="color:#1e88e5;">●</span> Serving Layer → Streamlit (app), Gateway API, Inference API
-- <span style="color:#2e7d32;">●</span> Training Layer → Airflow, MLflow, PostgreSQL
-- <span style="color:#ef6c00;">●</span> Monitoring Layer → Prometheus, Grafana
+⚫ **Entry Layer** → Nginx (HTTPS reverse proxy)  
+🔵 **Serving Layer** → Streamlit (app), Gateway API, Inference API  
+🟢 **Training Layer** → Airflow, MLflow, PostgreSQL  
+🟠 **Monitoring Layer** → Prometheus, Grafana
 
 ## High-Level Service Diagram
 
@@ -95,11 +92,51 @@ flowchart TB
 
 ---
 
+# Live Deployment
+
+# Live Deployment
+
+The platform is deployed on an Oracle Cloud server and orchestrated with Kubernetes.  
+It is publicly accessible at:
+
+https://engineerai.space
+
+The following routes are exposed:
+
+- `/` → Streamlit application  
+- `/api` → Gateway API  
+- `/grafana` → Monitoring dashboards  
+
+Authentication is required to access protected services.
+
+The Streamlit application acts strictly as a frontend client of the Gateway API.  
+It does not communicate directly with Airflow, MLflow, or the Inference service.  
+All operational and inference requests pass through the Gateway layer.
+
+---
+
+# API Gateway
+
+The API Gateway is the central orchestration layer of the platform.
+
+All external interactions pass through the gateway.  
+No internal service (Airflow, MLflow, Inference API) is exposed directly.
+
+The gateway acts as:
+
+- A control plane for ML operations  
+- A secure abstraction layer over Airflow and MLflow  
+- A single entry point for both UI and programmatic access  
+
+Full interactive API documentation is available at https://engineerai.space/api/docs
+
+---
+
 # Prediction Flow
 
 1. User interacts with Streamlit App
 2. Request passes through Nginx (HTTPS)
-3. Gateway authenticates and proxies
+3. Gateway authenticates, validates, and proxies the request
 4. Inference API performs prediction
 5. Model loaded from MLflow alias `prod`
 6. Prediction returned to user
@@ -108,18 +145,14 @@ flowchart TB
 
 # Model Lifecycle
 
-1. Create or modify configuration (feature / model / split YAML)
-2. Trigger training via Gateway → Airflow
-3. Log metrics & artifacts in MLflow
-4. Evaluate model performance
-5. Promote if better (alias `prod`)
-6. Airflow triggers `/reload` on Inference API
-7. New model served immediately
+Model training, evaluation, promotion, and inference reload are fully automated through the Airflow orchestration layer.
 
-Full traceability is ensured through:
-- versioned configs
-- MLflow params logging
-- DVC data versioning
+The detailed lifecycle — including dataset splitting, MLflow tracking, DVC lineage logging, promotion logic, and registry alias management — is documented in:
+
+- `docs/train_pipeline.md`
+- `docs/data_pipeline.md`
+
+This separation keeps the README focused on system architecture while maintaining detailed technical traceability in dedicated documentation.
 
 ---
 
@@ -227,4 +260,3 @@ Environment variables managed via `.env`.
 
 This project demonstrates a clean, maintainable, production-oriented MLOps architecture, 
 designed for internal ML platform usage rather than leaderboard optimization.
-""", language="markdown")

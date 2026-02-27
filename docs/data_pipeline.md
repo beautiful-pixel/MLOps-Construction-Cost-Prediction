@@ -1,197 +1,137 @@
-# Data Pipeline – Technical Documentation
+# Data Platform – Architecture & Retraining Strategy
 
 ## 1. Overview
 
-The data pipeline transforms raw incoming data into a validated and versioned master dataset.
+This document describes the data orchestration layer of the platform.
 
-It follows a strict, contract-driven architecture and guarantees:
+The full platform includes:
+- A data ingestion and preprocessing pipeline
+- A retraining policy pipeline
+- A training pipeline responsible for model training and logging
 
-- Structural validation of tabular data  
-- Strict control of external files (e.g. satellite images)  
-- Deterministic canonical storage of images  
-- Atomic updates of the master dataset  
-- Full dataset versioning using DVC  
+This documentation focuses on the data-driven orchestration logic, which is responsible for:
 
-The pipeline is designed to be reproducible, deterministic, and robust against inconsistent data.
+- Continuously ingesting and validating new data
+- Maintaining a versioned master dataset
+- Monitoring dataset growth
+- Automatically deciding when model retraining is required
 
+The data orchestration layer is composed of two Airflow DAGs:
+
+- `data_pipeline_dag`: processes incoming batches end-to-end
+- `retrain_policy_dag`: evaluates whether retraining should be triggered
+
+The overall objective of this design is to ensure that:
+
+- Data processing is deterministic and reproducible
+- Dataset lineage is fully traceable (via DVC)
+- Training decisions are driven by measurable data growth
+- Model retraining occurs only when justified
 ---
 
-## 2. High-Level Flow
+## 2. Data Pipeline
 
-The pipeline is executed as a sequence of tasks:
+The `data_pipeline_dag` runs every 5 minutes and processes at most one batch at a time.
 
-incoming  
-→ ingestion  
-→ raw batch creation  
-→ raw versioning (DVC)  
-→ preprocess  
-→ master update  
-→ master versioning (DVC)  
-→ images versioning (DVC)  
-→ clean incoming  
+```mermaid
+flowchart LR
+    
+    A{"_READY &<br/>no _PROCESSING?<br/>(Every 5 min)"}
+    B["_READY<br/>↓<br/>_PROCESSING"]
+    C["Ingest<br/>+ DVC raw"]
+    D["Preprocess<br/>+ Merge master"]
+    E[Version master + Update CURRENT_MASTER_ROWS]
+    F[Clean incoming]
+    G["Trigger<br/>retrain_policy_dag"]
 
-Only one batch is processed per pipeline run.
+    A -->|Yes| B
+    A -->|No| Z[Stop]
 
----
-
-## 3. Storage Structure
-
-```
-data/
-    incoming/
-    raw/
-        batch_<timestamp>/
-            tabular/
-            images/
-    processed/
-        master.parquet
-    images/
-        sentinel2/
-        viirs/
-```
-
-- **incoming/**: temporary landing zone  
-- **raw/**: immutable ingestion archive  
-- **processed/**: cumulative validated dataset  
-- **images/**: canonical storage of external files  
-
----
-
-## 4. Ingestion Phase
-
-The ingestion step performs the following operations:
-
-1. Resolve the active data contract version.  
-2. Detect tabular and image files recursively in `incoming/`.  
-3. Validate that:
-   - No unknown files are present  
-   - Images are not ingested without tabular data  
-4. Create a new batch directory under `raw/`.  
-5. Move recognized files into:
-
-```
-raw/<batch_id>/tabular/
-raw/<batch_id>/images/
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
 ```
 
-If no files are found, ingestion returns `None`.
+### Execution Logic
 
-If any inconsistency is detected, the pipeline fails immediately (strict mode).
+1. **Gate / Lock**  
+   The DAG checks for `_READY`.  
+   If found, it renames it to `_PROCESSING` to ensure a single active batch.
+
+2. **Ingestion**  
+   Incoming tabular files and linked images are moved to a versioned raw batch directory.
+
+3. **Raw Versioning (DVC)**  
+   The raw batch is snapshotted with DVC to guarantee reproducibility.
+
+4. **Preprocessing**  
+   - Tabular data is validated against the active data contract  
+   - Linked images are validated and canonicalized  
+   - The batch is merged into the master dataset  
+   - The master is written atomically  
+
+5. **Master Versioning**  
+   The updated `master.parquet` is versioned with DVC.  
+   The Airflow variable `CURRENT_MASTER_ROWS` is updated.
+
+6. **Cleanup & Trigger**  
+   The lock is removed and the retrain policy DAG is triggered.
+
+This pipeline guarantees:
+
+- Exactly one active batch  
+- Atomic master updates  
+- Strict contract enforcement  
+- Deterministic dataset lineage  
 
 ---
 
-## 5. Raw Versioning
+## 3. Retrain Policy
 
-After ingestion, the raw directory is versioned using DVC.
+The `retrain_policy_dag` determines whether the model should be retrained.
 
-This ensures that each batch arrival is traceable and reproducible.
+```mermaid
+flowchart LR
 
-Even if preprocessing later fails, the raw batch remains archived.
-
----
-
-## 6. Preprocessing Phase
-
-The preprocess phase is responsible for:
-
-- Validating tabular files  
-- Processing linked external files  
-- Merging data into the master dataset  
-
-### Step 1 – Tabular Validation
-
-All tabular files in the batch are loaded and validated against the data contract.
-
-Validation includes:
-
-- Required columns  
-- Data types  
-- Constraints (min, max, regex, allowed values)  
-- Primary key uniqueness  
-
-### Step 2 – Linked Image Processing
-
-If the contract declares external image files:
-
-- Extract referenced filenames from the dataframe  
-- Ensure no referenced file is missing  
-- Ensure no unreferenced image exists in batch  
-- Validate technical constraints (bands, height, width)  
-- Canonicalize images into `data/images/<name>/`  
-- Attach derived relative path columns  
-
-This guarantees strict consistency between tabular data and external files.
-
-### Step 3 – Merge into Master
-
-The validated batch dataframe is merged into the cumulative master dataset using contract-defined deduplication rules.
-
-### Step 4 – Atomic Write
-
-The updated master dataset is written atomically:
+    A["Load production</br>model config"]
+    B["Search last compatible run</br>+ read master_rows metric"]
+    C["Compute new_rows from</br>CURRENT_MASTER_ROWS"]
+    D{"new_rows ≥ RETRAIN_THRESHOLD_ROWS ?"}
+    E[Trigger train_pipeline_dag]
+    A --> B
+    B --> C
+    C --> D
+    D -->|Yes| E
+    D -->|No| Z[Stop]
 
 ```
-write to temporary file
-replace original master file
-```
 
-This prevents corruption in case of interruption.
+### Decision Logic
 
----
+1. The production model configuration is retrieved from MLflow.
+2. The system searches for the last training run with the same:
+   - feature version  
+   - split version  
+   - model version  
+3. The metric `master_rows` from that run is compared to the variable `CURRENT_MASTER_ROWS`.
+4. If the number of new rows exceeds `RETRAIN_THRESHOLD_ROWS` (a runtime-configurable Airflow variable), training is triggered.
 
-## 7. Master and Image Versioning
+This ensures that:
 
-If preprocessing succeeds:
-
-- `master.parquet` is versioned with DVC  
-- `data/images/` is versioned with DVC  
-
-If no images changed, DVC detects no content modification.
-
----
-
-## 8. Strictness Guarantees
-
-The pipeline enforces the following invariants:
-
-- No unknown files in incoming  
-- No images without tabular data  
-- No missing referenced images  
-- No unreferenced images in batch  
-- No schema violations  
-- No primary key violations  
-- No partial master writes  
-
-Failure at any stage stops the pipeline immediately.
+- Retraining is data-driven  
+- Models are only retrained when justified  
+- Model lineage remains fully traceable  
 
 ---
 
-## 9. Reproducibility
+## 4. Design Principles
 
-The pipeline is reproducible because:
+The platform follows strict MLOps principles:
 
-- Raw batches are archived and versioned  
-- Master dataset is versioned  
-- Images are canonicalized deterministically  
-- The active data contract version is resolved explicitly  
-
-Re-running a batch with the same contract version produces identical results.
-
----
-
-## 10. Design Principles
-
-**Contract-driven validation**  
-All structural and technical rules are defined in versioned YAML contracts.
-
-**Strict mode**  
-The pipeline fails on any inconsistency rather than ignoring issues.
-
-**Separation of responsibilities**  
-Ingestion, preprocessing, versioning, and cleanup are separate tasks.
-
-**Atomic writes**  
-Critical datasets are written atomically to prevent corruption.
-
-**Deterministic storage**  
-External files are canonicalized to avoid naming collisions and ambiguity.
+- **Contract-driven validation**
+- **Atomic dataset updates**
+- **Full DVC versioning**
+- **MLflow-based experiment tracking**
+- **Automated, data-aware retraining**

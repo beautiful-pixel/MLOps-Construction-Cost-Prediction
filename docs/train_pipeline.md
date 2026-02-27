@@ -1,280 +1,107 @@
-# Training Pipeline – Technical Documentation
+# Training Pipeline – Model Lifecycle & Promotion
 
-## 1. Overview
+The `train_pipeline_dag` manages the model lifecycle, from dataset splitting to conditional promotion in production.
 
-The training pipeline builds, evaluates, and conditionally promotes a machine learning model using fully versioned components.
+It operates on the validated master dataset produced by the data pipeline.
 
-It guarantees:
+The pipeline can be triggered automatically by the `retrain_policy_dag` or manually via the platform API. In both cases, it receives a runtime configuration containing:
 
-- Explicit configuration resolution  
+- `split_version`
+- `feature_version`
+- `model_version`
+
+Each training run is fully reproducible, versioned, evaluated, and traceable before any production update occurs.
+
+---
+
+## High-Level Flow
+
+```mermaid
+flowchart LR
+
+    A[Resolve runtime config]
+    C[Split master dataset]
+    D[Version splits + log lineage]
+    E[Train model]
+    F[Evaluate model]
+    G{Better than production?}
+    H[Set alias prod]
+    I[Persist current config as defaults]
+    J[Reload inference service]
+
+    A --> C --> D --> E --> F --> G
+    G -->|Yes| H --> I --> J
+    G -->|No| Z[End]
+```
+
+---
+
+## Execution Logic
+
+The pipeline begins by resolving the runtime configuration provided at trigger time.  
+If versions are not explicitly passed, defaults are loaded from `active_config.yaml`.  
+All requested versions are validated to ensure they are allowed and consistent before training starts.
+
+A new MLflow run is then created. This run becomes the single source of truth for:
+
+- Dataset statistics  
+- Model parameters  
+- Training and evaluation metrics  
+- Dataset lineage  
+- Promotion decision  
+- Feature schema used  
+
+The master dataset is loaded and split according to the specified `split_version`.  
+This produces:
+
+- A training dataset  
+- A fixed reference dataset  
+- Optional additional test datasets  
+
+All datasets are written atomically. Split statistics such as row counts and duration are logged to MLflow.
+
+The reference test dataset is created only if it does not already exist.  
+If a reference dataset for the given `split_version` is already present, it is loaded and reused without being overwritten.  
+This guarantees a stable evaluation baseline across training runs.
+
+The generated splits are then versioned with DVC.  
+Dataset hashes extracted from DVC metadata are logged into MLflow to ensure full reproducibility of the training context.
+
+During training, the appropriate feature schema and model definition are loaded.  
+The training dataframe is validated, features and targets are extracted, preprocessing is constructed, and the model is fitted.
+
+The full preprocessing and model pipeline is stored as an MLflow artifact.
+
+The model is then evaluated on the fixed reference dataset and any optional test datasets.
+
+The reference evaluation metric (`reference_rmsle`) drives the promotion decision.
+
+If the new model outperforms the current production model, the pipeline updates the MLflow Model Registry by setting the alias `prod` to the new version.
+
+If the model does not outperform the current production model, the pipeline ends without modifying production.
+
+When promotion occurs, the default versions in `active_config.yaml` are updated to reflect the promoted configuration.  
+This ensures that future retraining cycles use the validated setup.
+
+Finally, the pipeline attempts to notify the inference service through a `/reload` endpoint so that the production model is refreshed.  
+This step is best-effort and does not cause the DAG to fail if the service is unavailable.
+
+---
+
+## Guarantees
+
+The training pipeline guarantees:
+
 - Deterministic dataset splitting  
-- Controlled dataset versioning via DVC  
-- Versioned feature and model definitions  
-- Single MLflow run per pipeline execution  
-- Reproducible training and evaluation  
-- Safe production promotion logic  
-
-The pipeline is designed for strict reproducibility and clear experiment lineage.
-
----
-
-## 2. High-Level Flow
-
-The pipeline executes sequentially:
-
-resolve_config  
-→ start_mlflow_run  
-→ split_data  
-→ version_split_data (DVC)  
-→ train_model  
-→ evaluate_model  
-→ promote_model  
-
-Each pipeline execution corresponds to exactly one MLflow run.
-
----
-
-## 3. Configuration Resolution
-
-Runtime configuration is resolved from:
-
-- DAG runtime parameters (if provided)  
-- Active default configuration  
-
-Validated parameters:
-
-- split_version  
-- feature_version  
-- model_version  
-
-Strict validation ensures:
-
-- The version exists  
-- The version is allowed  
-- No implicit fallback to unknown configuration  
-
-If validation fails, the pipeline stops immediately.
-
----
-
-## 4. MLflow Run Initialization
-
-A single MLflow run is created at the beginning of the pipeline.
-
-The run logs:
-
-- split_version  
-- feature_version  
-- model_version  
-
-All subsequent tasks attach to this same run using its run_id.
-
-This ensures:
-
-- Unified experiment traceability  
-- No nested runs  
-- Clear lineage across tasks  
-
----
-
-## 5. Split Phase
-
-The split phase:
-
-- Loads the master dataset  
-- Applies the versioned split schema  
-- Enforces reference test immutability  
-- Persists split artifacts  
-
-### 5.1 Reference Test Handling
-
-If the reference test already exists:
-
-- It is loaded  
-- It is never overwritten  
-
-If it does not exist:
-
-- It is created  
-- It becomes frozen  
-- It is stored permanently  
-
-This guarantees a stable evaluation benchmark across experiments.
-
----
-
-## 6. Atomic Split Persistence
-
-Train and optional test datasets are written atomically.
-
-Instead of:
-
-```python
-train_df.to_parquet(train_path)
-```
-
-The process is:
-
-```python
-tmp_path = train_path.with_suffix(".tmp")
-train_df.to_parquet(tmp_path, index=False)
-tmp_path.replace(train_path)
-```
-
-This prevents corruption in case of interruption.
-
-Split directory structure:
-
-    data/splits/v<split_version>/
-        train.parquet
-        optional_tests/
-
-Reference tests:
-
-    data/reference/tests/v<split_version>/
-        test_reference.parquet
-
----
-
-## 7. Split Versioning (DVC)
-
-After split creation:
-
-- The train split directory is versioned with DVC  
-- The reference test is versioned only if newly created  
-
-The MLflow run logs:
-
-- Data lineage metadata  
-- Version information  
-
-This guarantees reproducibility of training inputs.
-
----
-
-## 8. Training Phase
-
-The training phase performs:
-
-1. Feature schema loading (versioned YAML)  
-2. Model schema loading (versioned YAML)  
-3. Dataset validation  
-4. Construction of full sklearn pipeline  
-5. Model fitting  
-6. Training metric logging  
-
-Pipeline structure:
-
-```python
-Pipeline(
-    steps=[
-        ("preprocessor", preprocessor),
-        ("model", model),
-    ]
-)
-```
-
-The entire pipeline is logged to MLflow as a single artifact.
-
----
-
-## 9. Evaluation Phase
-
-The trained pipeline is reloaded from MLflow using:
-
-```python
-model_uri = f"runs:/{run_id}/model"
-pipeline = mlflow.sklearn.load_model(model_uri)
-```
-
-Evaluation is performed on:
-
-- Frozen reference test dataset  
-- Optional test datasets  
-
-Metrics are logged with prefixes:
-
-- reference_<metric_name>  
-- <optional_name>_<metric_name>  
-
-The reference metric is used for promotion decisions.
-
----
-
-## 10. Promotion Logic
-
-The candidate model is compared against the current production model.
-
-If:
-
-- No production model exists → promote directly  
-- Candidate metric is better → promote  
-- Otherwise → keep current production  
-
-Promotion steps:
-
-```python
-result = mlflow.register_model(model_uri, MODEL_NAME)
-
-client.transition_model_version_stage(
-    name=MODEL_NAME,
-    version=result.version,
-    stage="Production",
-)
-```
-
-Promotion is deterministic and metric-driven.
-
----
-
-## 11. Reproducibility Guarantees
-
-The training pipeline is reproducible because:
-
-- split_version is fixed  
-- feature_version is fixed  
-- model_version is fixed  
-- Master dataset is versioned  
-- Splits are versioned  
-- Images are versioned  
-- MLflow logs full lineage  
-
-Re-running the pipeline with identical versions produces identical results.
-
----
-
-## 12. Strictness Guarantees
-
-The pipeline enforces:
-
-- No unknown split version  
-- No unknown feature version  
-- No unknown model version  
-- No empty training dataset  
-- No modification of reference benchmark  
-- No partial artifact logging  
-- No silent promotion  
-
-Any violation results in immediate failure.
-
----
-
-## 13. Design Principles
-
-Version-driven architecture  
-All structural definitions are versioned.
-
-Single-run experiment model  
-One pipeline execution equals one MLflow run.
-
-Immutable reference benchmark  
-Ensures long-term evaluation consistency.
-
-Deterministic promotion policy  
-Production transition is rule-based and automatic.
-
-Atomic persistence  
-Critical artifacts are written atomically.
-
-Separation of responsibilities  
-Split, versioning, training, evaluation, and promotion are isolated tasks.
+- Immutable reference dataset  
+- Full dataset lineage (DVC + MLflow)  
+- Explicit, metric-based promotion  
+- Registry-based production control  
+- Safe production model updates  
+
+Every promoted model is therefore:
+
+- Reproducible  
+- Traceable  
+- Auditable  
+- Data-validated  
