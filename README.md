@@ -128,6 +128,58 @@ This separation keeps the README focused on system architecture while maintainin
 
 ---
 
+# Evaluation Metrics
+
+Primary metric:
+- RMSLE (official Solafune metric)
+
+Additional metrics are MAE and R² and all metrics are logged in MLflow.
+
+---
+
+# Monitoring
+
+The platform includes a Prometheus + Grafana observability stack.
+
+Prometheus scrapes:
+
+- **Gateway API** → request volume and latency (`api_requests_total`, `api_request_duration_seconds`)
+- **Inference API** → latency (p95), prediction distribution, confidence scores, served model version
+- **Infrastructure exporters** → Nginx, host metrics (CPU, memory), Prometheus internal metrics
+
+Alerting rules monitor:
+
+- Service availability (`up`)
+- Inference latency (histogram quantiles)
+- Request throughput
+- Resource usage
+
+Dashboards are accessible via `/grafana` behind Nginx.
+
+---
+
+# Key MLOps Capabilities
+
+- **End-to-end orchestration with Airflow**  
+  Automated ingestion → preprocessing → splitting → training → evaluation → promotion → serving reload.
+
+- **Full lineage & reproducible training**  
+  DVC versioning (raw, master, splits, reference tests) combined with MLflow tracking and Model Registry (`prod` alias), ensuring deterministic runs and comparable experiments.
+
+- **Strict, versioned configuration system**  
+  YAML-based data contracts, feature schemas, model definitions, split strategies, and runtime defaults.
+
+- **Data-driven retraining policy**  
+  Automatic retrain trigger based on master dataset growth threshold.
+
+- **Secure microservice architecture**  
+  Gateway control plane, isolated inference service, Streamlit frontend, Nginx reverse proxy.
+
+- **Production-grade deployment & observability**  
+  Docker & Kubernetes deployment, Prometheus monitoring, Grafana dashboards, Slack notifications, CI automation.
+
+---
+
 # Repository Structure
 
 ```
@@ -178,27 +230,6 @@ mlops-project/
 
 ---
 
-# Evaluation Metrics
-
-Primary metric:
-- RMSLE (official Solafune metric)
-
-Additional metrics:
-- MAE
-- R²
-
-All metrics are logged in MLflow.
-
----
-
-# Monitoring
-
-- Prometheus scrapes API metrics
-- Grafana provides dashboards
-- Accessible via `/grafana` behind Nginx
-
----
-
 # Running the Platform
 
 Development:
@@ -214,28 +245,6 @@ docker compose -f deployments/compose.yaml up -d
 ```
 
 Environment variables managed via `.env`.
-
----
-
-# Key MLOps Capabilities
-
-- **End-to-end orchestration with Airflow**  
-  Automated ingestion → preprocessing → splitting → training → evaluation → promotion → serving reload.
-
-- **Full lineage & reproducible training**  
-  DVC versioning (raw, master, splits, reference tests) combined with MLflow tracking and Model Registry (`prod` alias), ensuring deterministic runs and comparable experiments.
-
-- **Strict, versioned configuration system**  
-  YAML-based data contracts, feature schemas, model definitions, split strategies, and runtime defaults.
-
-- **Data-driven retraining policy**  
-  Automatic retrain trigger based on master dataset growth threshold.
-
-- **Secure microservice architecture**  
-  Gateway control plane, isolated inference service, Streamlit frontend, Nginx reverse proxy.
-
-- **Production-grade deployment & observability**  
-  Docker & Kubernetes deployment, Prometheus monitoring, Grafana dashboards, Slack notifications, CI automation.
 
 ---
 
