@@ -128,6 +128,27 @@ This separation keeps the README focused on system architecture while maintainin
 
 ---
 
+# Configuration Management
+
+The platform relies on a versioned, YAML-based configuration system that governs the entire ML lifecycle.
+
+The following components are explicitly versioned and validated:
+
+- Data contracts (columns, types, constraints, targets)
+- Feature schemas (imputation, encoding, scaling rules)
+- Model schemas (model type and hyperparameters)
+- Split strategies (deterministic dataset partitioning)
+
+The file `active_config.yaml` defines the default versions used for training, as well as the active data contract used to build and validate the master dataset.
+
+This design ensures explicit configuration governance, reproducible training runs, and safe promotion of validated setups, while maintaining a clear separation between configuration and code.
+
+For detailed configuration flow and validation logic, see:
+
+- `docs/configuration_management.md`
+
+---
+
 # Evaluation Metrics
 
 Primary metric:
@@ -245,6 +266,12 @@ docker compose -f deployments/compose.yaml up -d
 ```
 
 Environment variables managed via `.env`.
+
+---
+
+# Continuous Integration
+
+The project includes a GitHub Actions CI pipeline. On each push or pull request unit and integration tests are executed. This ensures early detection of regressions and maintains platform stability.
 
 ---
 
