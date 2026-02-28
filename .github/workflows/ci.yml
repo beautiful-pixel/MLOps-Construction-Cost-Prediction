@@ -143,22 +143,27 @@ jobs:
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/gateway-api:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/gateway-api:prod \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             -f api/gateway_api/Dockerfile .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/inference-api:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/inference-api:prod \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             -f api/inference_api/Dockerfile .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/streamlit:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/streamlit:prod \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             -f apps/ml_platform/Dockerfile.streamlit .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/airflow:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/airflow:prod \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             -f deployments/airflow/Dockerfile.airflow .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/mlflow:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/mlflow:prod \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             -f deployments/mlflow/Dockerfile.mlflow .
 
       - name: Push Docker images to registry
