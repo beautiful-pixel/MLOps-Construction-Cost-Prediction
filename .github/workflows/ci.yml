@@ -126,3 +126,50 @@ jobs:
           curl -X POST -H 'Content-type: application/json' \
             --data "{\"text\":\"Workflow Integration Tests *${{ github.workflow }}* (${STATUS})\nRepo: ${{ github.repository }}\nRun: ${RUN_URL}\"}" \
             "${SLACK_WEBHOOK_URL}"
+
+  docker:
+    needs: [test-unit, test-integration]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build Docker images
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/gateway-api:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository_owner }}/gateway-api:prod \
+            api/gateway-api
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/inference-api:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository_owner }}/inference-api:prod \
+            api/inference-api
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/streamlit:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository_owner }}/streamlit:prod \
+            app/ml_platform
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/airflow:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository_owner }}/airflow:prod \
+            deployments/airflow
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/mlflow:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository_owner }}/mlflow:prod \
+            deployments/mlflow
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/nginx:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository_owner }}/nginx:prod \
+            deployments/nginx
+
+      - name: Push Docker images to registry
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/gateway-api:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/inference-api:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/streamlit:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/airflow:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/mlflow:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/nginx:${{ github.sha }}

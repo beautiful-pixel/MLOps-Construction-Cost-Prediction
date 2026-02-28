@@ -213,7 +213,7 @@ mlops-project/
 ├── src/                           # Core ML business library (Python package)
 │   ├── data/                      # Data ingestion & validation logic
 │   ├── features/                  # Feature schema & preprocessing pipelines
-│   ├── models/                    # Model schema & MLflow loader
+│   ├── models/                    # Model schema
 │   ├── inference/                 # Dynamic request schema builder
 │   ├── registry/                  # MLflow registry utilities
 │   ├── splitting/                 # Train/test split orchestration
