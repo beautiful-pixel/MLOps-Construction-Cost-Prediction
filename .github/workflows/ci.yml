@@ -143,11 +143,11 @@ jobs:
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/gateway-api:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/gateway-api:prod \
-            api/gateway-api
+            api/gateway_api
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/inference-api:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/inference-api:prod \
-            api/inference-api
+            api/inference_api
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/streamlit:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/streamlit:prod \
