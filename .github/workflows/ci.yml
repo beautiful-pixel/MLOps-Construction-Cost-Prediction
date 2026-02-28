@@ -160,10 +160,6 @@ jobs:
             -t ghcr.io/${{ github.repository_owner }}/mlflow:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/mlflow:prod \
             -f deployments/mlflow/Dockerfile.mlflow .
-          docker build \
-            -t ghcr.io/${{ github.repository_owner }}/nginx:${{ github.sha }} \
-            -t ghcr.io/${{ github.repository_owner }}/nginx:prod \
-            -f deployments/nginx/Dockerfile .
 
       - name: Push Docker images to registry
         run: |
@@ -172,4 +168,3 @@ jobs:
           docker push ghcr.io/${{ github.repository_owner }}/streamlit:${{ github.sha }}
           docker push ghcr.io/${{ github.repository_owner }}/airflow:${{ github.sha }}
           docker push ghcr.io/${{ github.repository_owner }}/mlflow:${{ github.sha }}
-          docker push ghcr.io/${{ github.repository_owner }}/nginx:${{ github.sha }}
