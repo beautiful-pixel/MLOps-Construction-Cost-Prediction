@@ -143,27 +143,27 @@ jobs:
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/gateway-api:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/gateway-api:prod \
-            api/gateway_api
+            -f api/gateway_api/Dockerfile .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/inference-api:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/inference-api:prod \
-            api/inference_api
+            -f api/inference_api/Dockerfile .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/streamlit:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/streamlit:prod \
-            app/ml_platform
+            -f app/ml_platform/Dockerfile.streamlit .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/airflow:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/airflow:prod \
-            deployments/airflow
+            -f deployments/airflow/Dockerfile.airflow .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/mlflow:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/mlflow:prod \
-            deployments/mlflow
+            -f deployments/mlflow/Dockerfile.mlflow .
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/nginx:${{ github.sha }} \
             -t ghcr.io/${{ github.repository_owner }}/nginx:prod \
-            deployments/nginx
+            -f deployments/nginx/Dockerfile .
 
       - name: Push Docker images to registry
         run: |
