@@ -11,7 +11,6 @@ COPY src/ src/
 RUN pip install --no-cache-dir ".[gateway]"
 
 COPY api/gateway_api/ .
-COPY configs/ /app/configs/
 
 EXPOSE 8080
 
